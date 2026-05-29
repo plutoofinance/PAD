@@ -1187,22 +1187,22 @@ const TOTAL = 30;
 let current = 1;
 
 const stepMessages = {
-  [11,1]: ["Executando Bloco 2...", "Limpeza · padronização · normalização de acentos"],
-  [11,2]: ["Processando output...", "Calculando distribuição por UF e validando datas"],
-  [12,1]: ["Executando Bloco 3...", "Calculando recência · classificando status · extraindo CEP-3"],
-  [12,2]: ["Processando estatísticas...", "Agregando por status_recente"],
-  [14,1]: ["Renderizando...", "Top 15 cidades por volume de participantes"],
-  [14,2]: ["Renderizando...", "Top 20 bairros por volume de participantes"],
-  [15,1]: ["Renderizando...", "Evolução temporal das últimas compras por mês"],
-  [16,1]: ["Renderizando...", "Distribuição de status RECENTE vs ANTIGO"],
-  [16,2]: ["Calculando...", "Histograma da recência com corte de 365 dias"],
-  [17,1]: ["Renderizando...", "Heatmap top 20 bairros × status do cliente"],
-  [17,2]: ["Renderizando...", "Heatmap top 20 sub-regiões postais × status"],
-  [19,1]: ["Calculando inertia...", "K-Means rodando para K=2, 3, 4, ..., 10"],
-  [20,1]: ["Renderizando...", "Dispersão Volume × % Recentes colorido por cluster"],
-  [20,2]: ["Renderizando...", "Dispersão Recência × % Recentes colorido por cluster"],
-  [22,1]: ["Treinando e renderizando...", "DecisionTreeClassifier · max_depth=5 · class_weight=balanced"],
-  [23,1]: ["Calculando...", "feature_importances_ · cidade · bairro · cep3"]
+  '11,1': ["Executando Bloco 2...", "Limpeza · padronização · normalização de acentos"],
+  '11,2': ["Processando output...", "Calculando distribuição por UF e validando datas"],
+  '12,1': ["Executando Bloco 3...", "Calculando recência · classificando status · extraindo CEP-3"],
+  '12,2': ["Processando estatísticas...", "Agregando por status_recente"],
+  '14,1': ["Renderizando...", "Top 15 cidades por volume de participantes"],
+  '14,2': ["Renderizando...", "Top 20 bairros por volume de participantes"],
+  '15,1': ["Renderizando...", "Evolução temporal das últimas compras por mês"],
+  '16,1': ["Renderizando...", "Distribuição de status RECENTE vs ANTIGO"],
+  '16,2': ["Calculando...", "Histograma da recência com corte de 365 dias"],
+  '17,1': ["Renderizando...", "Heatmap top 20 bairros × status do cliente"],
+  '17,2': ["Renderizando...", "Heatmap top 20 sub-regiões postais × status"],
+  '19,1': ["Calculando inertia...", "K-Means rodando para K=2, 3, 4, ..., 10"],
+  '20,1': ["Renderizando...", "Dispersão Volume × % Recentes colorido por cluster"],
+  '20,2': ["Renderizando...", "Dispersão Recência × % Recentes colorido por cluster"],
+  '22,1': ["Treinando e renderizando...", "DecisionTreeClassifier · max_depth=5 · class_weight=balanced"],
+  '23,1': ["Calculando...", "feature_importances_ · cidade · bairro · cep3"]
 };
 
 function getSlideSteps(n) {
