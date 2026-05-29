@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""
+gen_apresentacao.py — Company Connection · Análise Geográfica de Participantes
+Grupo 5 · IBMEC RJ · Análise de Dados (IBM3297) · 2026.1
+Complete rebuild — navy/amber palette, Playfair Display + Inter
+"""
 import base64, os
 
 def load_b64(path):
@@ -6,7 +11,6 @@ def load_b64(path):
         with open(path, 'rb') as f:
             return base64.b64encode(f.read()).decode()
     except FileNotFoundError:
-        # Return a 1x1 transparent PNG as fallback
         return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
 images = {
@@ -27,1562 +31,1601 @@ images = {
 
 b64 = {k: load_b64(v) for k, v in images.items()}
 
-html = f"""<!DOCTYPE html>
+# ─── helpers ──────────────────────────────────────────────────────────────────
+
+def img(key, style=""):
+    return f'<img src="data:image/png;base64,{b64[key]}" style="max-width:100%;display:block;{style}" alt="{key}">'
+
+def section_label(text):
+    return f'<div class="section-label"><span class="dot"></span>{text}</div>'
+
+def concept(text, title=None):
+    t = f'<div class="concept-title">{title}</div>' if title else ''
+    return f'<div class="concept-box">{t}<p>{text}</p></div>'
+
+def insight(text):
+    return f'<div class="insight-box"><span class="insight-icon">💡</span><div><strong>O que isso significa:</strong><p>{text}</p></div></div>'
+
+def code_cell(code, cell_num=1, loader_msg="Executando...", loader_sub=""):
+    return f'''<div class="code-cell">
+  <div class="cell-header">
+    <span class="cell-in">In [{cell_num}]:</span>
+    <button class="run-btn" data-msg="{loader_msg}" data-sub="{loader_sub}">&#9654; RUN</button>
+  </div>
+  <pre><code class="language-python">{code}</code></pre>
+</div>'''
+
+def step(n, content):
+    return f'<div class="step-content" data-step="{n}">{content}</div>'
+
+# ─── CSS ──────────────────────────────────────────────────────────────────────
+
+CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --navy:        #1a2744;
+  --navy-mid:    #243560;
+  --amber:       #e8a020;
+  --amber-light: #f5b942;
+  --bg:          #f4f6f9;
+  --bg-white:    #ffffff;
+  --bg-card:     #eef1f7;
+  --border:      #d1d9e6;
+  --text:        #1a2744;
+  --text-mid:    #3d4f6e;
+  --text-light:  #6b7c99;
+  --green:       #2d8a4e;
+  --red:         #c0392b;
+  --blue-soft:   #3b6cb7;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: 'Inter', sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── PROGRESS BAR ── */
+#progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: var(--navy); z-index: 1000;
+  transition: width 0.3s ease;
+}
+
+/* ── SLIDE COUNTER ── */
+#slide-counter {
+  position: fixed; bottom: 18px; left: 24px; z-index: 1000;
+  font-size: 12px; color: var(--text-light); font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+/* ── NAV ARROWS ── */
+#nav-prev, #nav-next {
+  position: fixed; bottom: 14px; z-index: 1000;
+  background: var(--navy); color: white; border: none;
+  width: 38px; height: 38px; border-radius: 50%;
+  font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s, transform 0.15s;
+}
+#nav-prev { right: 72px; }
+#nav-next { right: 24px; }
+#nav-prev:hover, #nav-next:hover { background: var(--amber); transform: scale(1.1); }
+
+/* ── SLIDES CONTAINER ── */
+#deck {
+  width: 100vw; height: 100vh;
+  position: relative; overflow: hidden;
+}
+
+.slide {
+  position: absolute; inset: 0;
+  display: none; flex-direction: column;
+  background: var(--bg);
+  padding: 48px 64px 72px;
+  overflow-y: auto;
+  animation: fadeIn 0.35s ease;
+}
+.slide.active { display: flex; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ── SECTION LABEL ── */
+.section-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--amber);
+  margin-bottom: 10px;
+}
+.section-label .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--amber); flex-shrink: 0;
+}
+
+/* ── SLIDE TITLE ── */
+.slide-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 38px; font-weight: 700;
+  color: var(--navy); line-height: 1.15;
+  margin-bottom: 6px;
+}
+.slide-subtitle {
+  font-size: 14px; color: var(--text-light);
+  font-style: italic; margin-bottom: 20px;
+}
+
+/* ── CONCEPT BOX ── */
+.concept-box {
+  border-left: 4px solid var(--amber);
+  background: var(--bg-white);
+  padding: 14px 18px;
+  border-radius: 0 6px 6px 0;
+  margin-bottom: 18px;
+  font-size: 13.5px; line-height: 1.65;
+  color: var(--text-mid);
+}
+.concept-title {
+  font-weight: 700; color: var(--navy);
+  font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; margin-bottom: 6px; color: var(--amber);
+}
+
+/* ── INSIGHT BOX ── */
+.insight-box {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--navy); color: white;
+  border-radius: 8px; padding: 14px 18px;
+  margin-top: 14px; font-size: 13px; line-height: 1.6;
+}
+.insight-box .insight-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.insight-box strong { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); margin-bottom: 4px; }
+.insight-box p { color: rgba(255,255,255,0.85); }
+
+/* ── CODE CELL ── */
+.code-cell {
+  border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.cell-header {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--navy); padding: 8px 14px;
+}
+.cell-in { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--amber); }
+.run-btn {
+  background: var(--amber); color: var(--navy);
+  border: none; border-radius: 4px; padding: 4px 12px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: background 0.2s;
+}
+.run-btn:hover { background: var(--amber-light); }
+.code-cell pre { margin: 0; }
+.code-cell pre code { font-family: 'JetBrains Mono', monospace !important; font-size: 12.5px !important; padding: 14px !important; }
+
+/* ── STEP CONTENT ── */
+.step-content {
+  opacity: 0; max-height: 0; overflow: hidden;
+  transition: opacity 0.4s ease, max-height 0.4s ease;
+  pointer-events: none;
+}
+.step-content.revealed {
+  opacity: 1; max-height: 2000px;
+  pointer-events: all;
+}
+
+/* ── TERMINAL OUTPUT ── */
+.terminal-box {
+  background: #0d1117; border-radius: 6px;
+  padding: 16px 18px; font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: #c9d1d9; line-height: 1.8;
+  margin-bottom: 14px;
+}
+.terminal-box .t-key { color: var(--amber); }
+.terminal-box .t-bar { color: #3b6cb7; }
+
+/* ── STAT CARDS ── */
+.stat-row { display: flex; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+.stat-card {
+  flex: 1; min-width: 140px;
+  border-radius: 10px; padding: 18px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.stat-card.navy { background: var(--navy); color: white; }
+.stat-card.amber { background: var(--amber); color: var(--navy); }
+.stat-card.green { background: #e8f5ee; border-left: 4px solid var(--green); }
+.stat-card.red   { background: #fdecea; border-left: 4px solid var(--red); }
+.stat-card .stat-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 32px; font-weight: 700; line-height: 1;
+}
+.stat-card.navy .stat-num { color: var(--amber); }
+.stat-card.amber .stat-num { color: var(--navy); }
+.stat-card .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.75; }
+.stat-card .stat-desc { font-size: 12px; line-height: 1.45; opacity: 0.8; margin-top: 4px; }
+
+/* ── TWO COLUMNS ── */
+.two-col { display: flex; gap: 20px; flex: 1; }
+.col-35 { flex: 0 0 35%; }
+.col-40 { flex: 0 0 40%; }
+.col-60 { flex: 0 0 60%; }
+.col-65 { flex: 0 0 65%; }
+.col-50 { flex: 1; }
+
+/* ── GENERIC CARD ── */
+.card {
+  background: var(--bg-white);
+  border-radius: 10px; padding: 18px;
+  border: 1px solid var(--border);
+}
+.card.navy { background: var(--navy); color: white; border-color: transparent; }
+.card.amber-top { border-top: 4px solid var(--amber); }
+.card-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--amber); margin-bottom: 6px;
+}
+.card-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 48px; font-weight: 700; line-height: 1;
+  margin-bottom: 6px;
+}
+.card-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.card-body { font-size: 13px; line-height: 1.6; color: var(--text-mid); }
+.card.navy .card-body { color: rgba(255,255,255,0.8); }
+.card.navy .card-title { color: white; }
+
+/* ── BADGE ── */
+.badge {
+  display: inline-block;
+  background: var(--amber); color: var(--navy);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 4px 10px; border-radius: 12px;
+  margin-bottom: 14px;
+}
+.badge.navy { background: var(--navy); color: var(--amber); }
+.badge.green { background: var(--green); color: white; }
+.badge.red { background: var(--red); color: white; }
+.badge.blue { background: var(--blue-soft); color: white; }
+
+/* ── TABLE ── */
+.styled-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.styled-table th {
+  background: var(--navy); color: white;
+  padding: 10px 12px; text-align: left;
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.styled-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.styled-table tr:nth-child(even) td { background: var(--bg-card); }
+.styled-table .td-num { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--amber); }
+.styled-table .row-amber td { background: #fff8e6; }
+.styled-table .row-green td { background: #e8f5ee; }
+.styled-table .row-red   td { background: #fdecea; }
+
+/* ── PIPELINE ── */
+.pipeline { display: flex; align-items: center; gap: 0; margin: 18px 0; flex-wrap: wrap; }
+.pipe-card {
+  background: var(--navy); color: white;
+  border-radius: 8px; padding: 14px 16px;
+  flex: 1; min-width: 100px; text-align: center;
+}
+.pipe-num { font-family: 'Playfair Display', serif; font-size: 24px; color: var(--amber); font-weight: 700; }
+.pipe-icon { font-size: 20px; margin: 4px 0; }
+.pipe-title { font-size: 13px; font-weight: 700; }
+.pipe-sub { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 3px; }
+.pipe-arrow { color: var(--amber); font-size: 20px; padding: 0 4px; flex-shrink: 0; }
+
+/* ── LIST ── */
+.check-list { list-style: none; padding: 0; }
+.check-list li { padding: 5px 0; font-size: 13px; line-height: 1.5; display: flex; gap: 8px; align-items: flex-start; }
+.check-list li::before { content: '•'; color: var(--amber); font-weight: 700; flex-shrink: 0; }
+
+/* ── LOADER OVERLAY ── */
+#loader-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(26, 39, 68, 0.95);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.3s;
+}
+#loader-overlay.visible { opacity: 1; pointer-events: all; }
+.loader-inner { text-align: center; }
+.loader-ring {
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 4px solid rgba(232, 160, 32, 0.3);
+  border-top-color: #e8a020;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 20px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loader-msg { color: white; font-size: 20px; font-weight: 600; }
+#loader-sub { color: rgba(255,255,255,0.6); font-size: 13px; margin-top: 8px; }
+.loader-track { width: 280px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin: 24px auto 0; }
+#loader-bar { height: 100%; background: #e8a020; border-radius: 2px; transition: width 0.4s ease; width: 0; }
+
+/* ── CAPA ── */
+#slide-1 {
+  background: var(--navy) !important;
+  padding: 0 !important;
+  flex-direction: row;
+  overflow: hidden;
+}
+.capa-bar {
+  width: 6px; background: var(--amber);
+  flex-shrink: 0; align-self: stretch;
+}
+.capa-content {
+  padding: 52px 64px 52px 56px;
+  display: flex; flex-direction: column;
+  justify-content: center; flex: 1;
+}
+.capa-eyebrow {
+  font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--amber); font-weight: 600; margin-bottom: 32px;
+}
+.capa-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 68px; font-weight: 900; color: white;
+  line-height: 1.05; margin-bottom: 16px;
+}
+.capa-subtitle {
+  font-size: 16px; color: rgba(255,255,255,0.65);
+  font-style: italic; margin-bottom: 28px;
+}
+.capa-line { width: 300px; height: 3px; background: var(--amber); margin-bottom: 24px; }
+.capa-group { color: var(--amber); font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px; }
+.capa-names { color: rgba(255,255,255,0.85); font-size: 13.5px; line-height: 1.9; }
+.capa-footer {
+  margin-top: auto; padding-top: 32px;
+  font-size: 12px; color: rgba(255,255,255,0.4); letter-spacing: 0.05em;
+}
+
+/* ── AGENDA ── */
+.agenda-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px; flex: 1;
+}
+.agenda-item {
+  background: var(--bg-white); border-radius: 10px;
+  padding: 20px 22px; border: 1px solid var(--border);
+  display: flex; gap: 16px; align-items: flex-start;
+}
+.agenda-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 42px; font-weight: 700; color: var(--amber);
+  line-height: 1; flex-shrink: 0;
+}
+.agenda-item-title { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+.agenda-item-sub { font-size: 12px; color: var(--text-light); line-height: 1.45; }
+
+/* ── AMBER UNDERLINE ── */
+.amber-underline {
+  width: 60px; height: 4px; background: var(--amber); border-radius: 2px; margin-bottom: 24px;
+}
+
+/* ── DARK COMPANY CARD ── */
+.company-left {
+  background: var(--navy); color: white;
+  border-radius: 10px; padding: 24px;
+  display: flex; flex-direction: column; gap: 12px;
+  justify-content: center;
+}
+.company-left .co-icon { font-size: 36px; }
+.company-left .co-bold { color: var(--amber); font-weight: 700; font-size: 15px; }
+.company-left .co-line { color: rgba(255,255,255,0.75); font-size: 13.5px; }
+
+/* ── RIGHT SECTIONS ── */
+.right-sections { display: flex; flex-direction: column; gap: 16px; }
+.right-section-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--amber); margin-bottom: 4px;
+}
+.right-section-text { font-size: 13px; line-height: 1.65; color: var(--text-mid); }
+
+/* ── PAIN CARDS (slide 4) ── */
+.pain-cards { display: flex; gap: 16px; flex: 1; margin-top: 10px; }
+.pain-card {
+  flex: 1; border-radius: 10px; padding: 22px;
+  background: var(--bg-white); border: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+.pain-card.highlight { background: var(--navy); color: white; border-top: 4px solid var(--amber); }
+.pain-card .pain-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 48px; font-weight: 700; line-height: 1;
+  margin-bottom: 8px;
+}
+.pain-card .pain-num.navy-num { color: var(--navy); }
+.pain-card .pain-num.amber-num { color: var(--amber); }
+.pain-card .pain-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.pain-card.highlight .pain-title { color: white; }
+.pain-card .pain-body { font-size: 12.5px; line-height: 1.6; color: var(--text-mid); flex: 1; }
+.pain-card.highlight .pain-body { color: rgba(255,255,255,0.8); }
+.focus-badge { display: inline-block; background: var(--amber); color: var(--navy); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 3px 8px; border-radius: 10px; margin-top: 10px; }
+
+/* ── HAS/HAS NOT PANELS ── */
+.has-panels { display: flex; gap: 16px; margin-bottom: 16px; }
+.has-panel {
+  flex: 1; background: var(--bg-white); border-radius: 8px; padding: 16px;
+  border: 1px solid var(--border);
+}
+.has-panel.has-yes { border-left: 4px solid var(--green); }
+.has-panel.has-no  { border-left: 4px solid var(--red); }
+.has-panel-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px; }
+.has-panel.has-yes .has-panel-title { color: var(--green); }
+.has-panel.has-no  .has-panel-title { color: var(--red); }
+.has-panel ul { list-style: none; padding: 0; }
+.has-panel ul li { font-size: 13px; padding: 3px 0; color: var(--text-mid); }
+
+/* ── COMPARISON LAYOUT (slide 7) ── */
+.compare-layout { display: flex; gap: 16px; align-items: stretch; flex: 1; }
+.compare-card {
+  flex: 1; border-radius: 10px; padding: 22px;
+  background: var(--bg-white); border: 1px solid var(--border);
+}
+.compare-card.navy { background: var(--navy); border-color: transparent; }
+.compare-card-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.compare-card.navy .compare-card-title { color: white; }
+.compare-card-sub { font-size: 11px; color: var(--amber); margin-bottom: 14px; font-style: italic; }
+.compare-arrow { display: flex; align-items: center; justify-content: center; font-size: 32px; color: var(--navy); flex-shrink: 0; padding: 0 4px; }
+.compare-list { list-style: none; padding: 0; }
+.compare-list li { font-size: 13px; padding: 5px 0; border-bottom: 1px solid rgba(0,0,0,0.06); color: var(--text-mid); }
+.compare-card.navy .compare-list li { color: rgba(255,255,255,0.8); border-bottom-color: rgba(255,255,255,0.08); }
+.strike { text-decoration: line-through; opacity: 0.5; }
+
+/* ── MODEL CARDS (slide 9) ── */
+.model-cards { display: flex; gap: 20px; flex: 1; }
+.model-card {
+  flex: 1; background: var(--navy); color: white;
+  border-radius: 12px; padding: 26px;
+}
+.model-section { margin-bottom: 14px; }
+.model-section-title { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); margin-bottom: 4px; }
+.model-section-body { font-size: 13px; color: rgba(255,255,255,0.82); line-height: 1.6; }
+.model-icon { font-size: 28px; margin-bottom: 6px; }
+.model-name { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: white; margin-bottom: 4px; }
+.model-tagline { font-size: 13px; color: rgba(255,255,255,0.6); font-style: italic; margin-bottom: 16px; }
+
+/* ── CLUSTER TABLE (slide 20) ── */
+.cluster-row-0 td { background: #fff8e6; }
+.cluster-row-1 td { background: #e8f5ee; }
+.cluster-row-2 td { background: var(--bg-white); }
+.cluster-row-3 td { background: #fdecea; }
+
+/* ── RECOMMENDATION COLUMNS (slide 24) ── */
+.rec-cols { display: flex; gap: 16px; flex: 1; }
+.rec-col { flex: 1; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); display: flex; flex-direction: column; }
+.rec-col-header { padding: 14px 18px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.rec-col-header.green { background: var(--green); color: white; }
+.rec-col-header.red   { background: var(--red);   color: white; }
+.rec-col-header.blue  { background: var(--blue-soft); color: white; }
+.rec-col-body { padding: 16px; flex: 1; background: var(--bg-white); display: flex; flex-direction: column; gap: 10px; }
+.rec-col-num { font-family: 'Playfair Display', serif; font-size: 36px; font-weight: 700; }
+.rec-col-num.green { color: var(--green); }
+.rec-col-num.red   { color: var(--red); }
+.rec-col-num.blue  { color: var(--blue-soft); }
+.rec-col-body p { font-size: 12px; color: var(--text-mid); line-height: 1.5; }
+.rec-col-body ul { list-style: none; padding: 0; }
+.rec-col-body ul li { font-size: 12px; color: var(--text); padding: 2px 0; }
+.rec-col-body ul li::before { content: '›  '; color: var(--amber); font-weight: 700; }
+.action-chip { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 10px; border-radius: 12px; margin-top: 6px; }
+.action-chip.green { background: #e8f5ee; color: var(--green); }
+.action-chip.red   { background: #fdecea; color: var(--red); }
+.action-chip.blue  { background: #e8eef8; color: var(--blue-soft); }
+
+/* ── BUDGET DONUT (slide 26) ── */
+.budget-layout { display: flex; gap: 32px; align-items: center; flex: 1; }
+.donut-wrap { flex-shrink: 0; }
+.donut-svg { width: 220px; height: 220px; }
+.budget-rows { flex: 1; display: flex; flex-direction: column; gap: 18px; }
+.budget-row { display: flex; gap: 14px; align-items: flex-start; }
+.budget-pct { font-family: 'Playfair Display', serif; font-size: 42px; font-weight: 700; line-height: 1; flex-shrink: 0; width: 80px; }
+.budget-pct.red   { color: var(--red); }
+.budget-pct.green { color: var(--green); }
+.budget-pct.blue  { color: var(--blue-soft); }
+.budget-row-title { font-size: 15px; font-weight: 700; color: var(--navy); }
+.budget-row-desc  { font-size: 12.5px; color: var(--text-mid); line-height: 1.5; margin-top: 2px; }
+
+/* ── STEP CARDS (slide 27) ── */
+.step-cards { display: flex; gap: 14px; margin: 18px 0; }
+.step-card {
+  flex: 1; background: var(--bg-white); border-radius: 8px;
+  padding: 16px; border: 1px solid var(--border); text-align: center;
+}
+.step-card .step-icon { font-size: 24px; margin-bottom: 8px; }
+.step-card .step-title { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+.step-card .step-desc { font-size: 11.5px; color: var(--text-light); line-height: 1.45; }
+
+/* ── VALUE CARDS (slide 28) ── */
+.value-cards { display: flex; gap: 16px; flex: 1; }
+.value-card {
+  flex: 1; background: var(--navy); color: white;
+  border-radius: 12px; padding: 26px;
+}
+.value-icon-circle {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--amber); display: flex; align-items: center; justify-content: center;
+  font-size: 22px; margin-bottom: 14px;
+}
+.value-title { font-size: 16px; font-weight: 700; color: white; margin-bottom: 8px; }
+.value-body { font-size: 13px; color: rgba(255,255,255,0.8); line-height: 1.6; }
+
+/* ── CLOSING SLIDE ── */
+#slide-30 {
+  background: var(--navy) !important;
+  align-items: center; justify-content: center;
+  text-align: center;
+}
+.closing-icon {
+  width: 90px; height: 90px; border-radius: 50%;
+  background: rgba(232,160,32,0.15); border: 2px solid var(--amber);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px; margin: 0 auto 24px;
+}
+.closing-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 80px; font-weight: 700; color: white; line-height: 1;
+  margin-bottom: 8px;
+}
+.closing-underline { width: 80px; height: 4px; background: var(--amber); border-radius: 2px; margin: 0 auto 16px; }
+.closing-sub { font-size: 16px; color: rgba(255,255,255,0.6); font-style: italic; margin-bottom: 40px; }
+.closing-footer { font-size: 12px; color: rgba(255,255,255,0.35); letter-spacing: 0.1em; }
+
+/* ── HIGHLIGHT BOX ── */
+.highlight-box {
+  background: var(--navy); color: white;
+  border-radius: 10px; padding: 22px 26px;
+  display: flex; gap: 16px; align-items: center;
+  margin-bottom: 18px;
+}
+.highlight-box-icon { font-size: 32px; flex-shrink: 0; }
+.highlight-box-text { flex: 1; }
+.highlight-box-text strong { font-size: 17px; color: white; display: block; margin-bottom: 4px; }
+.highlight-box-text em { font-size: 13px; color: rgba(255,255,255,0.65); }
+
+/* ── PSEUDO CODE ── */
+.pseudo-code {
+  background: #0d1117; border-radius: 6px;
+  padding: 16px 18px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: #c9d1d9; line-height: 1.9;
+}
+.pseudo-code .pc-comment { color: #6b7c99; }
+.pseudo-code .pc-keyword { color: var(--amber); }
+
+/* ── EDUCATIONAL CONCEPTS (slide 10, 18, 21) ── */
+.edu-cards { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+.edu-card {
+  background: var(--bg-white); border-left: 4px solid var(--amber);
+  border-radius: 0 8px 8px 0; padding: 14px 18px;
+  border: 1px solid var(--border); border-left: 4px solid var(--amber);
+}
+.edu-card-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); margin-bottom: 6px; }
+.edu-card-body { font-size: 13px; line-height: 1.65; color: var(--text-mid); }
+
+/* ── CHIPS ── */
+.chip-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.chip {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 14px;
+  font-size: 12px; font-weight: 500; color: var(--text);
+}
+.chip.amber { background: #fff3d4; border-color: var(--amber); color: var(--navy); }
+
+/* ── IMPORTANCE CHIPS ── */
+.importance-chips { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.imp-chip {
+  border-radius: 8px; padding: 10px 16px;
+  font-size: 13px; font-weight: 600;
+}
+.imp-chip.amber { background: #fff3d4; border: 2px solid var(--amber); color: var(--navy); font-size: 15px; }
+.imp-chip.navy  { background: var(--navy); color: white; }
+.imp-chip.muted { background: var(--bg-card); color: var(--text-light); font-size: 12px; }
+
+/* ── SCROLL WITHIN SLIDE ── */
+.slide { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+"""
+
+# ─── SLIDES ───────────────────────────────────────────────────────────────────
+
+def slide(n, content, extra_class=""):
+    return f'<div class="slide {extra_class}" id="slide-{n}" data-slide="{n}">{content}</div>\n'
+
+def slide_header(section, title, subtitle=None):
+    s = section_label(section)
+    t = f'<h1 class="slide-title">{title}</h1>'
+    sub = f'<p class="slide-subtitle">{subtitle}</p>' if subtitle else ''
+    return s + t + sub
+
+# SLIDE 1: CAPA
+S1 = slide(1, '''
+<div class="capa-bar"></div>
+<div class="capa-content">
+  <div class="capa-eyebrow">PROJETO APLICADO · 2026.1</div>
+  <h1 class="capa-title">Análise Geográfica de<br>Participantes</h1>
+  <p class="capa-subtitle">Inteligência de marketing aplicada à Company Connection</p>
+  <div class="capa-line"></div>
+  <div class="capa-group">GRUPO 5</div>
+  <div class="capa-names">
+    Gabriel Maino Chamas<br>
+    Gabriela Borsoi Cohen<br>
+    Hyan Lucas Alves Fernandes<br>
+    Isabelle de Brito Cavalcante<br>
+    João Gabriel Stor Bittencourt<br>
+    Malena Catallini
+  </div>
+  <div class="capa-footer">IBMEC RJ &nbsp;·&nbsp; Análise de Dados (IBM3297) &nbsp;·&nbsp; Prof. Paulo Josef Hirsch</div>
+</div>
+''')
+
+# SLIDE 2: AGENDA
+S2 = slide(2, '''
+<h1 class="slide-title" style="font-family:'Playfair Display',serif;font-size:44px;color:var(--navy);margin-bottom:6px;">Agenda</h1>
+<div class="amber-underline"></div>
+<div class="agenda-grid">
+  <div class="agenda-item">
+    <div class="agenda-num">01</div>
+    <div><div class="agenda-item-title">Introdução ao Problema</div>
+    <div class="agenda-item-sub">Quem é a Company Connection, o contexto e o desafio</div></div>
+  </div>
+  <div class="agenda-item">
+    <div class="agenda-num">02</div>
+    <div><div class="agenda-item-title">Metodologia</div>
+    <div class="agenda-item-sub">Como abordamos os dados e os modelos escolhidos</div></div>
+  </div>
+  <div class="agenda-item">
+    <div class="agenda-num">03</div>
+    <div><div class="agenda-item-title">Resultados Obtidos</div>
+    <div class="agenda-item-sub">O que descobrimos — com demonstração ao vivo</div></div>
+  </div>
+  <div class="agenda-item">
+    <div class="agenda-num">04</div>
+    <div><div class="agenda-item-title">Recomendações</div>
+    <div class="agenda-item-sub">Plano de ação concreto para o marketing</div></div>
+  </div>
+  <div class="agenda-item">
+    <div class="agenda-num">05</div>
+    <div><div class="agenda-item-title">Conclusão</div>
+    <div class="agenda-item-sub">O valor entregue e a reusabilidade da solução</div></div>
+  </div>
+  <div class="agenda-item">
+    <div class="agenda-num">06</div>
+    <div><div class="agenda-item-title">Perguntas e Respostas</div>
+    <div class="agenda-item-sub">Discussão aberta</div></div>
+  </div>
+</div>
+''')
+
+# SLIDE 3: A COMPANY CONNECTION
+S3 = slide(3, f'''
+{slide_header("01 · INTRODUÇÃO AO PROBLEMA", "A Company Connection")}
+<div class="two-col" style="flex:1;">
+  <div class="col-35">
+    <div class="company-left" style="height:100%;">
+      <div class="co-icon">🏢</div>
+      <div class="co-bold">Empresa de 2024</div>
+      <div class="co-line">Operação nacional</div>
+      <div class="co-line">~40–50 colaboradores</div>
+    </div>
+  </div>
+  <div class="col-65">
+    <div class="right-sections">
+      <div>
+        <div class="right-section-label">O QUE FAZEM</div>
+        <div class="right-section-text">Operam sorteios totalmente legalizados para influenciadores digitais e marcas, usando títulos de capitalização e bilhetes lotéricos. O participante compra um bilhete e concorre a prêmios em sorteios regulamentados.</div>
+      </div>
+      <div>
+        <div class="right-section-label">POR QUE EXISTEM</div>
+        <div class="right-section-text">Cobrem uma lacuna jurídica do mercado: a maioria dos influenciadores conduzia sorteios de forma irregular, sujeitos a multas e investigações. A Company Connection oferece a estrutura legal para operar com segurança.</div>
+      </div>
+      <div>
+        <div class="right-section-label">PRINCIPAIS CLIENTES</div>
+        <div class="right-section-text">Influenciadores de grande expressão como Wesley Alemão e Razuki, além de marcas que utilizam sorteios em campanhas promocionais.</div>
+      </div>
+    </div>
+  </div>
+</div>
+''')
+
+# SLIDE 4: TRÊS DORES
+S4 = slide(4, f'''
+{slide_header("01 · INTRODUÇÃO AO PROBLEMA", "As três dores do negócio")}
+<div class="pain-cards">
+  <div class="pain-card">
+    <div class="pain-num navy-num">01</div>
+    <div class="pain-title">Concorrência informal</div>
+    <div class="pain-body">Operadores irregulares oferecem prêmios maiores pelo mesmo preço, pois não recolhem impostos (~30–40% de carga tributária). Competição desleal estrutural.</div>
+  </div>
+  <div class="pain-card highlight">
+    <div class="pain-num amber-num">02</div>
+    <div class="pain-title">Decisões no feeling</div>
+    <div class="pain-body">O time de marketing decide campanhas observando outros influenciadores, sem olhar o perfil real do próprio público.</div>
+    <div><span class="focus-badge">FOCO DO NOSSO PROJETO</span></div>
+  </div>
+  <div class="pain-card">
+    <div class="pain-num navy-num">03</div>
+    <div class="pain-title">Dependência técnica</div>
+    <div class="pain-body">Análises simples (segmentação por região, reativação) exigem profissional com Excel/SQL, criando gargalo operacional.</div>
+  </div>
+</div>
+<p style="font-style:italic;color:var(--navy);font-size:14px;margin-top:14px;text-align:center;font-weight:500;">"É aqui que dados podem fazer diferença concreta."</p>
+''')
+
+# SLIDE 5: PROBLEMA ESCOLHIDO
+S5 = slide(5, f'''
+{slide_header("01 · INTRODUÇÃO AO PROBLEMA", "O problema escolhido")}
+<div class="highlight-box">
+  <div class="highlight-box-icon">🗄️</div>
+  <div class="highlight-box-text">
+    <strong>100 mil registros de uma base esquecida — sem virar inteligência.</strong>
+    <em>Base do produto Cap Mania, sorteio semanal operado entre 2022 e 2024 e posteriormente descontinuado.</em>
+  </div>
+</div>
+<div class="right-section-label" style="margin-bottom:12px;">POR QUE ISSO IMPORTA</div>
+<div style="display:flex;gap:14px;flex:1;">
+  <div class="edu-card" style="flex:1;">
+    <div class="edu-card-title">Dinheiro mal direcionado</div>
+    <div class="edu-card-body">Mídia paga sem dados do próprio público gera CAC mais alto. Investimento sem direcionamento é desperdício mensurável.</div>
+  </div>
+  <div class="edu-card" style="flex:1;">
+    <div class="edu-card-title">Oportunidades perdidas</div>
+    <div class="edu-card-body">Milhares de clientes dormentes esperando uma campanha de reativação. Cada dia sem ação é receita deixada na mesa.</div>
+  </div>
+  <div class="edu-card" style="flex:1;">
+    <div class="edu-card-title">Falta de escalabilidade</div>
+    <div class="edu-card-body">Cada nova decisão depende de profissional técnico — não escala. O script que entregaremos resolve isso.</div>
+  </div>
+</div>
+''')
+
+# SLIDE 6: A BASE
+S6 = slide(6, f'''
+{slide_header("02 · METODOLOGIA", "A base que recebemos")}
+<div class="stat-row" style="margin-bottom:18px;">
+  <div class="stat-card navy"><div class="stat-num">100.365</div><div class="stat-label">registros no total</div></div>
+  <div class="stat-card navy"><div class="stat-num">5</div><div class="stat-label">colunas disponíveis</div></div>
+  <div class="stat-card navy"><div class="stat-num">2022–25</div><div class="stat-label">período coberto</div></div>
+  <div class="stat-card amber"><div class="stat-num">99,7%</div><div class="stat-label">estão no Rio de Janeiro</div></div>
+</div>
+<div class="has-panels">
+  <div class="has-panel has-yes">
+    <div class="has-panel-title">✓ O QUE TEMOS</div>
+    <ul>
+      <li>bairro</li><li>cidade</li><li>UF (estado)</li>
+      <li>CEP</li><li>data da última compra</li>
+    </ul>
+  </div>
+  <div class="has-panel has-no">
+    <div class="has-panel-title">✗ O QUE NÃO TEMOS</div>
+    <ul>
+      <li>Idade / faixa etária</li><li>Gênero</li><li>Telefone / DDD</li>
+      <li>E-mail / contato</li><li>Nome / CPF (dados pessoais)</li>
+    </ul>
+  </div>
+</div>
+<div class="concept-box" style="margin-bottom:0;">
+  <div class="concept-title">NOTA EDUCACIONAL</div>
+  <p>A ausência de dados demográficos não é um problema — é uma oportunidade de mostrar o que se faz com apenas 5 colunas. Toda a análise é construída sobre localização e data.</p>
+</div>
+''')
+
+# SLIDE 7: REVISÃO DE METODOLOGIA
+S7 = slide(7, f'''
+{slide_header("02 · METODOLOGIA", "A revisão de metodologia", "Inspecionar a base antes de modelar é parte do método. Foi exatamente isso que nos guiou:")}
+<div class="compare-layout">
+  <div class="compare-card">
+    <div class="compare-card-title">PROPOSTA INICIAL</div>
+    <div class="compare-card-sub">Antes</div>
+    <ul class="compare-list">
+      <li class="strike">Análise de escopo nacional</li>
+      <li class="strike">Variáveis demográficas (idade, telefone, e-mail)</li>
+      <li class="strike">Segmentação individual por cliente</li>
+      <li class="strike">Mapa de calor como "modelo"</li>
+    </ul>
+  </div>
+  <div class="compare-arrow">→</div>
+  <div class="compare-card navy">
+    <div class="compare-card-title">METODOLOGIA REVISADA</div>
+    <div class="compare-card-sub">Depois</div>
+    <ul class="compare-list">
+      <li>Foco regional: Rio de Janeiro</li>
+      <li>Apenas variáveis efetivamente disponíveis</li>
+      <li>Segmentação por bairro (não por pessoa)</li>
+      <li>Dois modelos da matéria: K-Means + Árvore</li>
+    </ul>
+  </div>
+</div>
+<p style="font-style:italic;font-weight:700;color:var(--navy);font-size:14px;margin-top:14px;text-align:center;">"Análise mais profunda, mais acionável, mais honesta com os dados."</p>
+''')
+
+# SLIDE 8: PIPELINE
+S8 = slide(8, f'''
+{slide_header("02 · METODOLOGIA", "Pipeline analítico", "Seis etapas executadas em sequência, do Google Colab à recomendação final.")}
+<div class="pipeline">
+  <div class="pipe-card"><div class="pipe-num">1</div><div class="pipe-icon">🗄️</div><div class="pipe-title">Coleta</div><div class="pipe-sub">Carregamento do CSV</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-card"><div class="pipe-num">2</div><div class="pipe-icon">⚙️</div><div class="pipe-title">Limpeza</div><div class="pipe-sub">Padronização, acentos, UF</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-card"><div class="pipe-num">3</div><div class="pipe-icon">📊</div><div class="pipe-title">Variáveis</div><div class="pipe-sub">Recência, status, CEP-3</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-card"><div class="pipe-num">4</div><div class="pipe-icon">🔍</div><div class="pipe-title">Exploração</div><div class="pipe-sub">Estatísticas e gráficos</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-card"><div class="pipe-num">5</div><div class="pipe-icon">🧠</div><div class="pipe-title">Modelagem</div><div class="pipe-sub">K-Means + Árvore</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-card"><div class="pipe-num">6</div><div class="pipe-icon">🎯</div><div class="pipe-title">Recomendações</div><div class="pipe-sub">Plano de ação</div></div>
+</div>
+<div class="concept-box" style="background:var(--navy);border-color:var(--amber);">
+  <div class="concept-title" style="color:var(--amber);">💡 DEMONSTRAÇÃO AO VIVO</div>
+  <p style="color:rgba(255,255,255,0.85);">Durante a apresentação, mostraremos cada uma dessas etapas executando ao vivo. O código foi desenhado para ser reutilizável em qualquer base com a mesma estrutura de 5 colunas.</p>
+</div>
+''')
+
+# SLIDE 9: OS DOIS MODELOS
+S9 = slide(9, f'''
+{slide_header("02 · METODOLOGIA", "Os dois modelos escolhidos", "Cobrimos as duas grandes famílias da matéria — não supervisionado e supervisionado.")}
+<div class="model-cards">
+  <div class="model-card">
+    <div class="card-label">MODELO 1 · NÃO SUPERVISIONADO</div>
+    <div class="model-icon">👥</div>
+    <div class="model-name">K-Means</div>
+    <div class="model-tagline">Agrupa bairros em tiers de oportunidade</div>
+    <div class="model-section"><div class="model-section-title">RESPONDE</div><div class="model-section-body">Que tipos de bairro existem na nossa base?</div></div>
+    <div class="model-section"><div class="model-section-title">ENTREGA</div><div class="model-section-body">4 perfis nomeados de bairros, com características distintas de volume, recência e engajamento.</div></div>
+    <div class="model-section"><div class="model-section-title">POR QUE NÃO SUPERVISIONADO?</div><div class="model-section-body">Não precisamos de "respostas certas" — deixamos o algoritmo descobrir os agrupamentos naturais. Ideal quando queremos explorar padrões desconhecidos.</div></div>
+  </div>
+  <div class="model-card">
+    <div class="card-label">MODELO 2 · SUPERVISIONADO</div>
+    <div class="model-icon">🌳</div>
+    <div class="model-name">Árvore de Decisão</div>
+    <div class="model-tagline">Identifica padrões geográficos do comportamento</div>
+    <div class="model-section"><div class="model-section-title">RESPONDE</div><div class="model-section-body">Qual variável geográfica mais influencia a compra recente?</div></div>
+    <div class="model-section"><div class="model-section-title">ENTREGA</div><div class="model-section-body">Importância relativa de cada variável geográfica e regras visuais interpretáveis pelo marketing.</div></div>
+    <div class="model-section"><div class="model-section-title">POR QUE SUPERVISIONADO?</div><div class="model-section-body">Aqui temos uma variável-alvo conhecida (RECENTE ou ANTIGO). O modelo aprende com esses rótulos para descobrir padrões geográficos.</div></div>
+  </div>
+</div>
+<p style="font-size:12px;color:var(--text-light);font-style:italic;text-align:center;margin-top:10px;">"Mapa de calor é visualização, não modelo — figura no Bloco 5 do notebook como apoio exploratório."</p>
+''')
+
+# SLIDE 10: CONCEITO LIMPEZA (educational)
+S10 = slide(10, f'''
+{slide_header("03 · RESULTADOS", "Por que limpeza de dados importa")}
+<div class="edu-cards">
+  <div class="edu-card">
+    <div class="edu-card-title">O problema dos dados reais</div>
+    <div class="edu-card-body">Dados do mundo real chegam sujos. A mesma cidade pode aparecer como "Rio de Janeiro", "RIO DE JANEIRO", "rio de janeiro" e "Rio de Janeiro " (com espaço). Para um modelo de machine learning, essas são QUATRO cidades diferentes — o que distorce qualquer análise.</div>
+  </div>
+  <div class="edu-card">
+    <div class="edu-card-title">As três técnicas que usamos</div>
+    <div class="edu-card-body">1. <strong>Padronização:</strong> tudo em caixa alta + remoção de espaços.&nbsp;&nbsp; 2. <strong>Remoção de acentos</strong> via normalização Unicode (NITERÓI → NITEROI).&nbsp;&nbsp; 3. <strong>Invalidação de UFs</strong> fora dos 27 estados brasileiros.</div>
+  </div>
+  <div class="edu-card">
+    <div class="edu-card-title">Engenharia de variáveis</div>
+    <div class="edu-card-body">Criar informação nova a partir do que já existe. Da coluna <code style="background:var(--bg-card);padding:2px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:12px;">ultima_compra</code> (uma data), derivamos: recência em dias, status RECENTE/ANTIGO, e CEP-3 (sub-região postal para campanhas geolocalizadas).</div>
+  </div>
+</div>
+''')
+
+# SLIDE 11: BLOCO 2 — LIMPEZA [code + result]
+CODE_B2 = """# Padronização: tudo em caixa alta + sem espaços extras
+df['cidade'] = df['cidade'].str.upper().str.strip()
+df['bairro'] = df['bairro'].str.upper().str.strip()
+df['uf']     = df['uf'].str.upper().str.strip()
+
+# Remove acentos (NITERÓI → NITEROI)
+# Decompõe caracteres → converte para ASCII → descarta o que não é ASCII
+for col in ['cidade', 'bairro']:
+    df[col] = df[col].str.normalize('NFKD')\\
+                     .str.encode('ascii', errors='ignore')\\
+                     .str.decode('utf-8')
+
+# UFs inválidas → None (mais honesto do que inventar um estado)
+ufs_validas = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
+               'MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN',
+               'RS','RO','RR','SC','SP','SE','TO']
+df.loc[~df['uf'].isin(ufs_validas), 'uf'] = None
+
+# Converte data de texto para datetime (necessário para calcular recência)
+df['ultima_compra'] = pd.to_datetime(df['ultima_compra'])"""
+
+_s11_step1 = step(1, (
+    '<div class="terminal-box">'
+    '<div><span class="t-key">UFs encontradas após a limpeza:</span></div>'
+    '<div>RJ &nbsp;&nbsp; 82.875 &nbsp; <span class="t-bar">██████████████████████████</span> 99,7%</div>'
+    '<div>SP &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 47 &nbsp; <span class="t-bar">▏</span></div>'
+    '<div>MG &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 16 &nbsp; <span class="t-bar">▏</span></div>'
+    '<div>DF &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 15 &nbsp; <span class="t-bar">▏</span></div>'
+    '<div>...outros &nbsp; 12</div>'
+    '<div>&nbsp;</div>'
+    '<div>Data mais antiga: &nbsp; <span class="t-key">2022-12-03</span></div>'
+    '<div>Data mais recente: &nbsp;<span class="t-key">2025-07-06</span></div>'
+    '<div>Período coberto: &nbsp;&nbsp; <span class="t-key">946 dias</span></div>'
+    '</div>'
+    + insight("A limpeza confirma o que veremos na EDA: 99,7% dos registros são do RJ. Isso não é problema — é uma descoberta que orienta toda a análise subsequente. A decisão de focar no RJ é baseada em evidência, não em suposição.")
+))
+
+S11 = slide(11, (
+    slide_header("03 · RESULTADOS", "Bloco 2 — Limpeza e Padronização")
+    + concept("A base tem inconsistências de formatação, acentuação variável e UFs inválidas. Antes de qualquer análise, precisamos garantir que 'NITERÓI' e 'NITEROI' sejam tratados como a mesma cidade. Usamos normalização Unicode (NFKD) — uma técnica de 1 linha que cobre todos os acentos de uma vez.")
+    + code_cell(CODE_B2, 2, "Executando Bloco 2...", "Limpeza · padronização · normalização de acentos")
+    + _s11_step1
+))
+
+# SLIDE 12: BLOCO 3 — ENGENHARIA [code + result]
+CODE_B3 = """# Recência: dias desde a última compra até a data mais recente da base
+data_corte = df['ultima_compra'].max()  # 2025-07-06
+df['recencia_dias'] = (data_corte - df['ultima_compra']).dt.days
+
+# Status: RECENTE (comprou nos últimos 365 dias) ou ANTIGO
+df['status_recente'] = 'ANTIGO'
+df.loc[df['recencia_dias'] <= DIAS_RECENTE, 'status_recente'] = 'RECENTE'
+
+# CEP-3: sub-região postal (primeiros 3 dígitos do CEP)
+# Ex: 22230-060 → '222' (Zona Sul do RJ)
+df['cep3'] = df['cep'].astype(str).str[:3]"""
+
+_s12_step1 = step(1, (
+    '<div class="stat-row">'
+    '<div class="stat-card navy"><div class="stat-num">479 dias</div><div class="stat-label">Recência média</div><div class="stat-desc">Mediana: 470 dias. A base está dormindo há mais de 1 ano em média.</div></div>'
+    '<div class="stat-card red"><div class="stat-num">64.355</div><div class="stat-label">Clientes ANTIGOS</div><div class="stat-desc">77,7% da base — produto descontinuado em 2024.</div></div>'
+    '<div class="stat-card green"><div class="stat-num">18.520</div><div class="stat-label">Clientes RECENTES</div><div class="stat-desc">22,3% — ainda engajados apesar da descontinuação.</div></div>'
+    '</div>'
+    + insight("A maioria esmagadora está dormindo. Mas isso é oportunidade: 64 mil pessoas que já compraram uma vez e podem ser reativadas. O status_recente que criamos aqui será a variável-alvo da Árvore de Decisão — o modelo aprenderá a identificar o perfil geográfico dos recentes.")
+))
+
+S12 = slide(12, (
+    slide_header("03 · RESULTADOS", "Bloco 3 — Engenharia de Variáveis")
+    + concept("Com apenas uma coluna de data, criamos três variáveis novas. Recência: quantos dias se passaram desde a última compra — transforma uma data em número comparável. Status: classifica cada cliente como RECENTE (≤365 dias) ou ANTIGO — cria a variável-alvo da Árvore de Decisão. CEP-3: os três primeiros dígitos do CEP identificam sub-regiões postais dos Correios — granularidade ideal para campanhas de Meta Ads e Google Ads.")
+    + code_cell(CODE_B3, 3, "Executando Bloco 3...", "Calculando recência · classificando status · extraindo CEP-3")
+    + _s12_step1
+))
+
+# SLIDE 13: O QUE A EDA REVELOU
+S13 = slide(13, f'''
+{slide_header("03 · RESULTADOS", "O que a análise exploratória revelou")}
+<div class="badge">DEMONSTRAÇÃO · BLOCOS 4–5</div>
+<div class="stat-row" style="flex:1;align-items:stretch;">
+  <div class="stat-card navy" style="flex:1;justify-content:center;">
+    <div class="stat-num">78%</div>
+    <div class="stat-label">dos clientes são ANTIGOS</div>
+    <div class="stat-desc">O produto descontinuado em 2024 deixou a maior parte da base inativa — daí o foco em reativação.</div>
+  </div>
+  <div class="stat-card navy" style="flex:1;justify-content:center;">
+    <div class="stat-num">75</div>
+    <div class="stat-label">sub-regiões postais únicas</div>
+    <div class="stat-desc">Granularidade ideal para campanhas de mídia paga geo-segmentada (Meta Ads, Google Ads).</div>
+  </div>
+  <div class="stat-card navy" style="flex:1;justify-content:center;">
+    <div class="stat-num">323</div>
+    <div class="stat-label">bairros com massa crítica</div>
+    <div class="stat-desc">Bairros com 50+ participantes — base estatística sólida para a clusterização K-Means.</div>
+  </div>
+</div>
+<div class="concept-box" style="background:var(--navy);border-color:var(--amber);">
+  <div class="concept-title" style="color:var(--amber);">AO VIVO</div>
+  <p style="color:rgba(255,255,255,0.85);">Top 15 cidades · Top 20 bairros · Evolução temporal das compras · Heatmap bairro × status</p>
+</div>
+''')
+
+# SLIDE 14: EDA — ONDE ESTÃO [2 steps]
+_s14_step1 = step(1,
+    '<div style="text-align:center;margin-bottom:12px;">' + img("cidades","max-height:42vh;margin:0 auto;") + '</div>'
+    + insight("Campo Grande, Guaratiba, Bangu. A Zona Oeste domina — não a Zona Sul como a intuição de muitos suporia. Isso tem implicações diretas para onde concentrar campanhas de mídia paga.")
+)
+_s14_step2 = step(2,
+    '<div style="text-align:center;margin-bottom:12px;">' + img("bairros","max-height:38vh;margin:0 auto;") + '</div>'
+    + insight("No nível bairro, a concentração é ainda mais nítida. Os 20 maiores bairros concentram uma fração desproporcional da base — exatamente onde o K-Means encontrará o cluster Núcleo Estratégico.")
+)
+S14 = slide(14, (
+    slide_header("03 · RESULTADOS", "Onde estão os participantes?")
+    + concept("O primeiro passo da análise exploratória é sempre perguntar: onde estão os dados? Para uma empresa de marketing, isso significa: em quais cidades e bairros está concentrado o público? A resposta surpreende.")
+    + _s14_step1 + _s14_step2
+), "data-steps='2'")
+
+# SLIDE 15: EDA — TEMPORAL [1 step]
+_s15_step1 = step(1,
+    '<div style="text-align:center;margin-bottom:12px;">' + img("temporal","max-height:52vh;margin:0 auto;") + '</div>'
+    + insight("O gráfico mostra claramente o auge em meados de 2024 e a queda abrupta após a descontinuação. Isso explica os 77% de clientes antigos: não é abandono voluntário — é consequência da pausa no produto. A base existe e pode ser reativada quando um novo produto for lançado.")
+)
+S15 = slide(15, (
+    slide_header("03 · RESULTADOS", "A linha do tempo do produto")
+    + concept("A análise temporal responde: quando o produto teve seu auge? A curva de compras conta a história completa do Cap Mania — lançamento, crescimento, pico e descontinuação. Entender isso é fundamental para interpretar o alto volume de clientes antigos.")
+    + _s15_step1
+), "data-steps='1'")
+
+# SLIDE 16: EDA — DORMÊNCIA [2 steps]
+_s16_step1 = step(1,
+    '<div style="display:flex;gap:16px;margin-bottom:12px;">'
+    + '<div style="flex:1;text-align:center;">' + img("pizza","max-height:40vh;margin:0 auto;") + '</div>'
+    + '<div style="flex:1;text-align:center;">' + img("histograma","max-height:40vh;margin:0 auto;") + '</div>'
+    + '</div>'
+    + insight("A linha vermelha no histograma é nosso corte. A maioria dos clientes está muito além dela — candidatos à reativação. O gráfico de pizza dá a proporção: 3 em cada 4 clientes não compram há mais de um ano.")
+)
+_s16_step2 = step(2, (
+    '<div class="insight-box">'
+    '<span class="insight-icon">📌</span>'
+    '<div><strong>CONEXÃO COM O PRÓXIMO MODELO</strong>'
+    '<p>A Árvore de Decisão será treinada para prever exatamente essa variável — RECENTE ou ANTIGO. O modelo aprenderá a associar padrões geográficos a esses dois perfis.</p>'
+    '</div></div>'
+))
+S16 = slide(16, (
+    slide_header("03 · RESULTADOS", "77% dormentes — e o que isso significa")
+    + concept("Definimos como recente qualquer compra nos últimos 365 dias. Essa escolha de parâmetro está no Bloco 0 e pode ser ajustada. O histograma de recência mostra a distribuição completa: onde está a maioria dos clientes no eixo do tempo, e como o nosso corte de 365 dias separa as duas populações.")
+    + _s16_step1 + _s16_step2
+), "data-steps='2'")
+
+# SLIDE 17: HEATMAPS [2 steps]
+_s17_step1 = step(1,
+    '<div style="text-align:center;margin-bottom:12px;">' + img("heatmap_bairros","max-height:46vh;margin:0 auto;") + '</div>'
+    + insight("Os bairros mais escuros na coluna ANTIGO são exatamente os que aparecerão no Top 10 em Risco — alto volume de clientes que pararam de comprar.")
+)
+_s17_step2 = step(2,
+    '<div style="text-align:center;margin-bottom:12px;">' + img("heatmap_cep3","max-height:46vh;margin:0 auto;") + '</div>'
+    + insight("O CEP-3 agrega por sub-regiões postais — uma visão menos granular que o bairro, mas útil para campanhas de raio no Google Ads ou Meta Ads.")
+)
+S17 = slide(17, (
+    slide_header("03 · RESULTADOS", "Mapa de calor: bairro por bairro")
+    + concept("O heatmap cruza duas variáveis categóricas — bairro e status do cliente. Cada célula representa a contagem de clientes naquela combinação. A intensidade da cor indica concentração. Para o marketing: bairros com calor em ANTIGO são alvos de reativação; bairros com calor em RECENTE merecem manutenção. Lembre: heatmap é VISUALIZAÇÃO — não é modelo.")
+    + _s17_step1 + _s17_step2
+), "data-steps='2'")
+
+# SLIDE 18: CONCEITO K-MEANS
+S18 = slide(18, f'''
+{slide_header("03 · RESULTADOS", "O que é o K-Means?")}
+<div class="badge">MODELO 1 · NÃO SUPERVISIONADO</div>
+<div class="two-col" style="flex:1;gap:24px;">
+  <div class="col-60">
+    <div class="edu-cards">
+      <div class="edu-card">
+        <div class="edu-card-title">O algoritmo em palavras simples</div>
+        <div class="edu-card-body">K-Means é um algoritmo de agrupamento. Você define K (quantos grupos quer), e ele distribui os dados nesses grupos de forma que elementos dentro do mesmo grupo sejam parecidos entre si e diferentes dos outros grupos. Ele não precisa de "respostas certas" — descobre os padrões sozinho.</div>
+      </div>
+      <div class="edu-card">
+        <div class="edu-card-title">Por que usamos no nível BAIRRO, não cliente?</div>
+        <div class="edu-card-body">O produto foi descontinuado em 2024. Individualmente, quase todo cliente está "antigo" — há pouca variabilidade para o modelo trabalhar. Mas alguns BAIRROS INTEIROS se mantiveram mais ativos que outros. Essa diferença regional é o que o K-Means consegue enxergar.</div>
+      </div>
+      <div class="edu-card">
+        <div class="edu-card-title">As 3 dimensões do agrupamento</div>
+        <div class="edu-card-body">
+          <div class="chip-row">
+            <span class="chip amber">📊 Volume — total de participantes no bairro</span>
+            <span class="chip amber">📅 Recência mediana — tempo médio sem comprar</span>
+            <span class="chip amber">✅ % Recentes — proporção de clientes ativos</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-40">
+    <div class="edu-card" style="margin-bottom:14px;">
+      <div class="edu-card-title">Pseudocódigo do K-Means</div>
+      <div class="pseudo-code">
+        <span class="pc-comment">1. Sorteia K centros aleatórios</span><br>
+        <span class="pc-comment">2. Atribui cada ponto ao</span><br>
+        &nbsp;&nbsp;&nbsp;<span class="pc-comment">centro mais próximo</span><br>
+        <span class="pc-comment">3. Recalcula cada centro como</span><br>
+        &nbsp;&nbsp;&nbsp;<span class="pc-comment">a média dos seus pontos</span><br>
+        <span class="pc-comment">4. Repete até os centros</span><br>
+        &nbsp;&nbsp;&nbsp;<span class="pc-comment">não se moverem mais</span>
+      </div>
+    </div>
+    <div class="edu-card">
+      <div class="edu-card-title">Por que padronizar as variáveis?</div>
+      <div class="edu-card-body">K-Means usa DISTÂNCIA entre pontos. Volume pode chegar a 2.000, enquanto % recentes vai de 0 a 100. Sem padronizar, volume dominaria o cálculo. StandardScaler coloca tudo na mesma escala (média 0, desvio 1).</div>
+    </div>
+  </div>
+</div>
+''')
+
+# SLIDE 19: COTOVELO [1 step]
+_s19_step1 = step(1,
+    '<div style="text-align:center;margin-bottom:12px;">' + img("cotovelo","max-height:50vh;margin:0 auto;") + '</div>'
+    + insight("A inertia cai rapidamente de K=2 a K=4. A partir de K=4, a melhora é marginal — o joelho está em K=4. Escolhemos esse valor. Além da estatística, 4 grupos é prático para o marketing: não é pouco (3 seria insuficiente para nuances), não é demais (5+ fica confuso para acionar).")
+)
+S19 = slide(19, (
+    slide_header("03 · RESULTADOS", "Quantos grupos? O método do cotovelo")
+    + concept("Diferente de outros algoritmos, o K-Means exige que você escolha K antes de rodar. Para não escolher arbitrariamente, usamos o método do cotovelo: rodamos o K-Means com K de 2 a 10 e medimos a inertia (soma das distâncias de cada ponto ao centro do seu grupo). Quanto menor a inertia, mais compactos os grupos — mas um K muito alto fragmenta demais. O cotovelo da curva indica o ponto ideal.")
+    + _s19_step1
+), "data-steps='1'")
+
+# SLIDE 20: K-MEANS TIERS [2 steps]
+_s20_table = (
+    '<div class="badge">DEMONSTRAÇÃO COLAB · BLOCO 6</div>'
+    '<div style="margin-bottom:16px;overflow-x:auto;">'
+    '<table class="styled-table"><thead>'
+    '<tr><th>Cluster</th><th>Nome</th><th>Bairros</th><th>Volume médio</th><th>% Recentes</th><th>Característica</th></tr>'
+    '</thead><tbody>'
+    '<tr class="cluster-row-0"><td>&#x1F3C6;</td><td><strong>Núcleo Estratégico</strong></td><td>6</td><td>1.642</td><td>26,1%</td><td>Megabairros — poucos, mas volume gigante</td></tr>'
+    '<tr class="cluster-row-1"><td>&#x1F49A;</td><td><strong>Engajado</strong></td><td>69</td><td>98</td><td>29,4%</td><td>Maior proporção de recentes — melhor engajamento</td></tr>'
+    '<tr class="cluster-row-2"><td>&#x1F4CA;</td><td><strong>Massa Padrão</strong></td><td>162</td><td>181</td><td>25,8%</td><td>Perfil médio, sem destaque para mais ou menos</td></tr>'
+    '<tr class="cluster-row-3"><td>&#x1F4C9;</td><td><strong>Em Declínio</strong></td><td>86</td><td>102</td><td>19,6%</td><td>Pior recência — candidatos a reativação</td></tr>'
+    '</tbody></table></div>'
+)
+_s20_step1 = step(1, '<div style="text-align:center;margin-bottom:10px;">' + img("scatter1","max-height:36vh;margin:0 auto;") + '</div>')
+_s20_step2 = step(2,
+    '<div style="display:flex;gap:16px;margin-bottom:10px;">'
+    + '<div style="flex:1;text-align:center;">' + img("scatter1","max-height:32vh;margin:0 auto;") + '</div>'
+    + '<div style="flex:1;text-align:center;">' + img("scatter2","max-height:32vh;margin:0 auto;") + '</div>'
+    + '</div>'
+    + insight("Os pontos no canto superior direito são o Núcleo Estratégico — alto volume, boa recência. Os pontos no canto inferior esquerdo são o Em Declínio. O K-Means encontrou estruturas naturais que fazem sentido de negócio.")
+)
+S20 = slide(20, (
+    slide_header("03 · RESULTADOS", "K-Means: 4 tiers de bairros descobertos")
+    + _s20_table + _s20_step1 + _s20_step2
+), "data-steps='2'")
+
+# SLIDE 21: CONCEITO ÁRVORE
+S21 = slide(21, f'''
+{slide_header("03 · RESULTADOS", "O que é a Árvore de Decisão?")}
+<div class="badge">MODELO 2 · SUPERVISIONADO</div>
+<div class="two-col" style="flex:1;gap:24px;">
+  <div class="col-60">
+    <div class="edu-cards">
+      <div class="edu-card">
+        <div class="edu-card-title">O algoritmo em palavras simples</div>
+        <div class="edu-card-body">A árvore de decisão é um modelo supervisionado — aprende com exemplos rotulados. Ela cria uma sequência de perguntas binárias que, seguidas em ordem, levam a uma conclusão: RECENTE ou ANTIGO. Cada pergunta é escolhida pelo algoritmo para separar melhor as duas classes.</div>
+      </div>
+      <div class="edu-card">
+        <div class="edu-card-title">Por que só variáveis geográficas?</div>
+        <div class="edu-card-body">Se incluíssemos a recência como preditora, seria trapaça — recência define RECENTE/ANTIGO. Ao usar APENAS cidade, bairro e CEP, forçamos o modelo a descobrir padrões geográficos puros.</div>
+      </div>
+      <div class="edu-card">
+        <div class="edu-card-title">Por que class_weight='balanced'?</div>
+        <div class="edu-card-body">Base desbalanceada: 75% ANTIGO vs 25% RECENTE. Sem ajuste, a árvore aprende o atalho preguiçoso: sempre prever ANTIGO. Isso dá 75% de acurácia mas identifica zero recentes — inútil. O balanceamento força o modelo a aprender a distinguir de verdade.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-40">
+    <div class="edu-cards">
+      <div class="edu-card">
+        <div class="edu-card-title">max_depth=5: por quê?</div>
+        <div class="edu-card-body">Sem limite de profundidade, a árvore cresce indefinidamente e "decora" os dados de treino (overfitting). Com 5 níveis, ela generaliza e ainda é possível visualizar e explicar. Essa limitação é uma decisão metodológica consciente.</div>
+      </div>
+      <div class="edu-card">
+        <div class="edu-card-title">Treino e teste (70/30)</div>
+        <div class="edu-card-body">Separamos 70% dos dados para treinar e 30% para testar. O modelo "faz prova" com dados que nunca viu. Se vai bem no treino mas mal no teste, decorou — isso é overfitting. <code style="background:var(--bg-card);padding:2px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:11px;">stratify=y</code> garante que a proporção RECENTE/ANTIGO seja igual nos dois conjuntos.</div>
+      </div>
+    </div>
+  </div>
+</div>
+''')
+
+# SLIDE 22: ÁRVORE — VISUALIZAÇÃO [1 step]
+_s22_step1 = step(1,
+    '<div style="text-align:center;margin-bottom:12px;">' + img("arvore","max-height:55vh;margin:0 auto;") + '</div>'
+    + insight("Raiz (topo) = primeira pergunta. Galho esquerdo = resposta verdadeira, galho direito = falsa. Azul = maioria ANTIGO, laranja = maioria RECENTE. As folhas mais laranja indicam onde o modelo identifica concentração de clientes recentes.")
+)
+S22 = slide(22, (
+    slide_header("03 · RESULTADOS", "A estrutura da árvore")
+    + concept("Cada nó da árvore é uma pergunta: bairro_cod <= X?. Cada galho é uma resposta (sim ou não). Cada folha é uma conclusão (RECENTE ou ANTIGO). A cor indica a classe majoritária; a impureza de Gini mede o quão misturadas estão as classes naquele nó. O algoritmo escolheu automaticamente as perguntas que melhor separam as classes com apenas 5 níveis de profundidade.")
+    + _s22_step1
+), "data-steps='1'")
+
+# SLIDE 23: ÁRVORE — O ACHADO [1 step]
+_s23_step1 = step(1,
+    '<div style="text-align:center;margin-bottom:12px;">' + img("importancia","max-height:38vh;margin:0 auto;") + '</div>'
+    + '<div class="importance-chips">'
+    + '<div class="imp-chip amber">&#x1F3D8; <strong>Bairro</strong> — variável mais preditiva — campanhas no nível bairro</div>'
+    + '<div class="imp-chip navy">&#x1F4EE; <strong>CEP-3</strong> — segundo lugar — útil para raio em Meta Ads</div>'
+    + '<div class="imp-chip muted">&#x1F3D9; <strong>Cidade</strong> — menor contribuição — granularidade insuficiente</div>'
+    + '</div>'
+    + insight("A análise confirma: segmentar por cidade é genérico demais; segmentar por CEP completo é específico demais (31 mil CEPs únicos no RJ). O bairro é a granularidade ideal — e a árvore chegou a essa conclusão sozinha.")
+    + '<div class="concept-box" style="margin-top:12px;">'
+    + '<div class="concept-title">ANÁLISE CRÍTICA</div>'
+    + '<p>A acurácia geral do modelo (49%) não é o foco aqui. Prever cliente a cliente é estruturalmente difícil — produto descontinuado, sinal preditivo fraco. O valor da árvore é INTERPRETATIVO: confirmar qual variável geográfica explica o comportamento da base.</p>'
+    + '</div>'
+)
+S23 = slide(23, (
+    slide_header("03 · RESULTADOS", "Bairro é a variável mais importante")
+    + concept("A árvore calcula automaticamente o quanto cada variável contribuiu para as separações — chamamos de importância. Uma variável com importância 0.65 significa que 65% do poder preditivo do modelo veio dela. Essa métrica responde diretamente à pergunta de negócio: em qual nível geográfico o marketing deve segmentar?")
+    + _s23_step1
+), "data-steps='1'")
+
+# SLIDE 24: TRÊS LISTAS
+S24 = slide(24, f'''
+{slide_header("03 · RESULTADOS", "Três listas priorizadas de bairros")}
+<div class="badge">DEMONSTRAÇÃO COLAB · BLOCO 8</div>
+<div class="rec-cols">
+  <div class="rec-col">
+    <div class="rec-col-header green">TOP 10 ESTRELA · MANTER</div>
+    <div class="rec-col-body">
+      <div><div class="rec-col-num green">2.808</div><p>clientes recentes</p></div>
+      <p style="font-style:italic;font-size:12px;">Alto volume + alta % de recentes</p>
+      <p>Manter investimento em mídia paga geo-segmentada</p>
+      <ul>
+        <li>Campo Grande</li><li>Santa Cruz</li><li>Bangu</li>
+        <li>Realengo</li><li>Paciência</li>
+      </ul>
+      <div><span class="action-chip green">Google Ads + Instagram</span></div>
+    </div>
+  </div>
+  <div class="rec-col">
+    <div class="rec-col-header red">TOP 10 EM RISCO · REATIVAR</div>
+    <div class="rec-col-body">
+      <div><div class="rec-col-num red">5.435</div><p>clientes dormentes</p></div>
+      <p style="font-style:italic;font-size:12px;">Alto volume + baixa % de recentes</p>
+      <p>Campanha de reativação urgente — maior potencial de retorno</p>
+      <ul>
+        <li>Centro</li><li>Guaratiba</li><li>Taquara</li>
+        <li>Inhoaíba</li><li>Ramos</li>
+      </ul>
+      <div><span class="action-chip red">Meta Ads geo + WhatsApp</span></div>
+    </div>
+  </div>
+  <div class="rec-col">
+    <div class="rec-col-header blue">TOP 10 EMERGENTES · EXPANDIR</div>
+    <div class="rec-col-body">
+      <div><div class="rec-col-num blue">682</div><p>participantes</p></div>
+      <p style="font-style:italic;font-size:12px;">Baixo volume + alta % de recentes</p>
+      <p>Testes A/B com investimento pequeno para validar expansão</p>
+      <ul>
+        <li>Encantado (40,3%)</li><li>Jd. José Bonifácio (39,1%)</li>
+        <li>Quitandinha (38%)</li><li>Aracatiba (37,2%)</li><li>Vila Itamarati (36,6%)</li>
+      </ul>
+      <div><span class="action-chip blue">Meta Ads A/B</span></div>
+    </div>
+  </div>
+</div>
+<p style="font-size:12px;color:var(--text-light);font-style:italic;margin-top:10px;text-align:center;">AO VIVO NO COLAB: tabelas detalhadas com cada um dos 30 bairros priorizados</p>
+''')
+
+# SLIDE 25: PLANO TOP 5
+S25 = slide(25, f'''
+{slide_header("04 · RECOMENDAÇÕES", "Plano de ação: Top 5 prioridades", "Os 5 bairros com maior potencial imediato de retorno — todos categoria REATIVAÇÃO.")}
+<table class="styled-table" style="margin-bottom:18px;">
+  <thead>
+    <tr>
+      <th>#</th><th>BAIRRO</th><th>VOLUME</th><th>% RECENTES</th><th>POTENCIAL</th><th>CANAL</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong style="color:var(--amber);font-family:'Playfair Display',serif;font-size:20px;">1</strong></td><td><strong>CENTRO</strong></td><td>2.009</td><td>24,9%</td><td>1.509 clientes</td><td>Meta Ads + WhatsApp</td></tr>
+    <tr><td><strong style="color:var(--amber);font-family:'Playfair Display',serif;font-size:20px;">2</strong></td><td><strong>GUARATIBA</strong></td><td>1.028</td><td>23,9%</td><td>782 clientes</td><td>Meta Ads + WhatsApp</td></tr>
+    <tr><td><strong style="color:var(--amber);font-family:'Playfair Display',serif;font-size:20px;">3</strong></td><td><strong>TAQUARA</strong></td><td>712</td><td>23,0%</td><td>548 clientes</td><td>Meta Ads + WhatsApp</td></tr>
+    <tr><td><strong style="color:var(--amber);font-family:'Playfair Display',serif;font-size:20px;">4</strong></td><td><strong>INHOAÍBA</strong></td><td>621</td><td>24,0%</td><td>472 clientes</td><td>Meta Ads + WhatsApp</td></tr>
+    <tr><td><strong style="color:var(--amber);font-family:'Playfair Display',serif;font-size:20px;">5</strong></td><td><strong>RAMOS</strong></td><td>619</td><td>24,7%</td><td>466 clientes</td><td>Meta Ads + WhatsApp</td></tr>
+  </tbody>
+</table>
+<div class="concept-box" style="background:var(--navy);border-color:var(--amber);">
+  <div class="concept-title" style="color:var(--amber);">💡</div>
+  <p style="color:rgba(255,255,255,0.85);font-style:italic;">Total de 3.777 clientes dormentes nos 5 primeiros bairros — base concreta para definir o orçamento de reativação. KPI sugerido: 5% de taxa de reativação em 90 dias = 189 clientes recuperados.</p>
+</div>
+''')
+
+# SLIDE 26: ORÇAMENTO
+DONUT_SVG = '''<svg class="donut-svg" viewBox="0 0 220 220">
+  <circle cx="110" cy="110" r="80" fill="none" stroke="#eef1f7" stroke-width="36"/>
+  <circle cx="110" cy="110" r="80" fill="none" stroke="#c0392b" stroke-width="36"
+    stroke-dasharray="251.3 502.65" stroke-dashoffset="0" transform="rotate(-90 110 110)"/>
+  <circle cx="110" cy="110" r="80" fill="none" stroke="#2d8a4e" stroke-width="36"
+    stroke-dasharray="175.9 502.65" stroke-dashoffset="-251.3" transform="rotate(-90 110 110)"/>
+  <circle cx="110" cy="110" r="80" fill="none" stroke="#3b6cb7" stroke-width="36"
+    stroke-dasharray="75.4 502.65" stroke-dashoffset="-427.2" transform="rotate(-90 110 110)"/>
+  <text x="110" y="105" text-anchor="middle" font-family="Playfair Display,serif" font-size="22" font-weight="700" fill="#1a2744">100%</text>
+  <text x="110" y="128" text-anchor="middle" font-family="Inter,sans-serif" font-size="10" fill="#6b7c99">distribuído</text>
+</svg>'''
+
+S26 = slide(26, f'''
+{slide_header("04 · RECOMENDAÇÕES", "Alocação sugerida de orçamento", "Distribuição inicial baseada no potencial dimensionado de cada categoria.")}
+<div class="budget-layout">
+  <div class="donut-wrap">{DONUT_SVG}</div>
+  <div class="budget-rows">
+    <div class="budget-row">
+      <div class="budget-pct red">50%</div>
+      <div>
+        <div class="budget-row-title">REATIVAÇÃO</div>
+        <div class="budget-row-desc">Maior potencial imediato: 5.435 clientes dormentes em 10 bairros</div>
+      </div>
+    </div>
+    <div class="budget-row">
+      <div class="budget-pct green">35%</div>
+      <div>
+        <div class="budget-row-title">MANUTENÇÃO</div>
+        <div class="budget-row-desc">Preservação da base ativa: 2.808 clientes recentes a serem retidos</div>
+      </div>
+    </div>
+    <div class="budget-row">
+      <div class="budget-pct blue">15%</div>
+      <div>
+        <div class="budget-row-title">EXPANSÃO</div>
+        <div class="budget-row-desc">Teste e aprendizado: 682 participantes em mercados pouco explorados</div>
+      </div>
+    </div>
+  </div>
+</div>
+<p style="font-size:13px;color:var(--text-light);font-style:italic;text-align:center;margin-top:14px;">Total dimensionado: 8.925 clientes acionáveis através do plano de ação.</p>
+''')
+
+# SLIDE 27: ATIVO PERMANENTE
+S27 = slide(27, f'''
+{slide_header("05 · CONCLUSÃO", "Não é uma análise pontual — é um ativo permanente")}
+<div class="highlight-box">
+  <div class="highlight-box-icon">🔄</div>
+  <div class="highlight-box-text">
+    <strong>O script funciona em qualquer base com as mesmas 5 colunas.</strong>
+    <em>Quando a Company Connection lançar um novo produto, basta trocar o arquivo CSV e rodar o notebook — em minutos, novas listas priorizadas estão prontas para o marketing.</em>
+  </div>
+</div>
+<div class="right-section-label" style="margin-bottom:14px;">COMO REUTILIZAR EM UMA BASE NOVA</div>
+<div class="step-cards">
+  <div class="step-card">
+    <div class="step-icon">1️⃣</div>
+    <div class="step-title">Trocar o CSV</div>
+    <div class="step-desc">Substituir o arquivo de entrada com a base nova</div>
+  </div>
+  <div class="step-card">
+    <div class="step-icon">2️⃣</div>
+    <div class="step-title">Ajustar parâmetros</div>
+    <div class="step-desc">Bloco 0: caminho, UF de foco, dias para "recente"</div>
+  </div>
+  <div class="step-card">
+    <div class="step-icon">3️⃣</div>
+    <div class="step-title">Executar tudo</div>
+    <div class="step-desc">Run All no Colab — pipeline completo roda em minutos</div>
+  </div>
+  <div class="step-card">
+    <div class="step-icon">4️⃣</div>
+    <div class="step-title">Coletar saídas</div>
+    <div class="step-desc">5 arquivos CSV prontos para o time de marketing</div>
+  </div>
+</div>
+''')
+
+# SLIDE 28: VALOR ENTREGUE
+S28 = slide(28, f'''
+{slide_header("05 · CONCLUSÃO", "O valor entregue à Company Connection")}
+<div class="value-cards">
+  <div class="value-card">
+    <div class="value-icon-circle">🧠</div>
+    <div class="value-title">De "feeling" para dados</div>
+    <div class="value-body">O marketing passa a decidir com base no perfil real da própria base de participantes — não mais copiando o que outros influenciadores fazem.</div>
+  </div>
+  <div class="value-card">
+    <div class="value-icon-circle">💰</div>
+    <div class="value-title">Plano dimensionado</div>
+    <div class="value-body">Cada recomendação vem com número absoluto de clientes em potencial — orienta orçamento sem ambiguidade.</div>
+  </div>
+  <div class="value-card">
+    <div class="value-icon-circle">🔄</div>
+    <div class="value-title">Ativo permanente</div>
+    <div class="value-body">Não é entregável único: o script é reutilizável a cada novo produto, sem necessidade de novo desenvolvimento.</div>
+  </div>
+</div>
+<div class="insight-box" style="margin-top:18px;justify-content:center;text-align:center;">
+  <div style="font-size:15px;font-weight:600;font-style:italic;color:white;">
+    "De 100.365 linhas paradas para 3 listas priorizadas — esse é o valor da análise de dados."
+  </div>
+</div>
+''')
+
+# SLIDE 29: AGENDA REVISITADA
+def _agenda_item_recap(n, t, s):
+    return (
+        '<div style="display:flex;gap:16px;align-items:center;background:var(--bg-white);border-radius:8px;padding:14px 18px;border:1px solid var(--border);">'
+        + '<span style="font-family:Playfair Display,serif;font-size:28px;font-weight:700;color:var(--amber);width:40px;">' + n + '</span>'
+        + '<span style="font-size:16px;">&#x2705;</span>'
+        + '<div><div style="font-size:14px;font-weight:700;color:var(--navy);">' + t + '</div>'
+        + '<div style="font-size:12px;color:var(--text-light);">' + s + '</div></div></div>'
+    )
+
+_s29_items = ''.join([
+    _agenda_item_recap(n, t, s)
+    for n, t, s in [
+        ("01","Introdução ao Problema","Empresa, contexto, dores e base de dados"),
+        ("02","Metodologia","Pipeline analítico e os dois modelos escolhidos"),
+        ("03","Resultados","EDA + K-Means (4 tiers) + Árvore (importância de bairro)"),
+        ("04","Recomendações","3 listas de 10 bairros + plano de ação com KPIs"),
+        ("05","Conclusão","Valor entregue + ativo permanente reutilizável"),
+    ]
+])
+
+S29 = slide(29, (
+    slide_header("06 · PERGUNTAS E RESPOSTAS", "O que cobrimos hoje")
+    + '<div style="display:flex;flex-direction:column;gap:10px;flex:1;justify-content:center;">'
+    + _s29_items
+    + '</div>'
+))
+
+# SLIDE 30: CLOSING
+S30 = slide(30, '''
+<div class="closing-icon">❓</div>
+<h1 class="closing-title">Perguntas?</h1>
+<div class="closing-underline"></div>
+<p class="closing-sub">Obrigado pela atenção.</p>
+<p class="closing-footer">Grupo 5 &nbsp;·&nbsp; IBMEC RJ &nbsp;·&nbsp; Análise de Dados &nbsp;·&nbsp; 2026.1</p>
+''')
+
+ALL_SLIDES = [S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,
+              S11,S12,S13,S14,S15,S16,S17,S18,S19,S20,
+              S21,S22,S23,S24,S25,S26,S27,S28,S29,S30]
+
+TOTAL = len(ALL_SLIDES)
+
+# ─── STEP MESSAGES ────────────────────────────────────────────────────────────
+
+STEP_MESSAGES = {
+    11: {1: ("Executando Bloco 2...", "Limpeza · padronização · normalização de acentos"),
+         2: ("Processando output...", "Calculando distribuição por UF e validando datas")},
+    12: {1: ("Executando Bloco 3...", "Calculando recência · classificando status · extraindo CEP-3"),
+         2: ("Processando estatísticas...", "Agregando por status_recente")},
+    14: {1: ("Renderizando...", "Top 15 cidades por volume de participantes"),
+         2: ("Renderizando...", "Top 20 bairros por volume de participantes")},
+    15: {1: ("Renderizando...", "Evolução temporal das últimas compras por mês")},
+    16: {1: ("Renderizando...", "Distribuição de status RECENTE vs ANTIGO"),
+         2: ("Calculando...", "Histograma da recência com corte de 365 dias")},
+    17: {1: ("Renderizando...", "Heatmap top 20 bairros × status do cliente"),
+         2: ("Renderizando...", "Heatmap top 20 sub-regiões postais × status")},
+    19: {1: ("Calculando inertia...", "K-Means rodando para K=2, 3, 4, ..., 10")},
+    20: {1: ("Renderizando...", "Dispersão Volume × % Recentes colorido por cluster"),
+         2: ("Renderizando...", "Dispersão Recência × % Recentes colorido por cluster")},
+    22: {1: ("Treinando e renderizando...", "DecisionTreeClassifier · max_depth=5 · class_weight=balanced")},
+    23: {1: ("Calculando...", "feature_importances_ · cidade · bairro · cep3")},
+}
+
+# build JS map
+step_js_lines = []
+for sn, steps in STEP_MESSAGES.items():
+    for st, (msg, sub) in steps.items():
+        step_js_lines.append(f'  [{sn},{st}]: ["{msg}", "{sub}"]')
+STEP_JS_MAP = "{\n" + ",\n".join(step_js_lines) + "\n}"
+
+# ─── JAVASCRIPT ───────────────────────────────────────────────────────────────
+
+JS = f"""
+const TOTAL = {TOTAL};
+let current = 1;
+
+const stepMessages = {STEP_JS_MAP};
+
+function getSlideSteps(n) {{
+  const el = document.getElementById('slide-' + n);
+  return el ? parseInt(el.getAttribute('data-steps') || '0') : 0;
+}}
+
+function getCurrentStep(n) {{
+  const el = document.getElementById('slide-' + n);
+  return el ? parseInt(el.getAttribute('data-current-step') || '0') : 0;
+}}
+
+function setCurrentStep(n, s) {{
+  const el = document.getElementById('slide-' + n);
+  if (el) el.setAttribute('data-current-step', s);
+}}
+
+function showSlide(n) {{
+  document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('slide-' + n);
+  if (el) el.classList.add('active');
+  document.getElementById('slide-counter').textContent = n + ' / ' + TOTAL;
+  const pct = (n / TOTAL) * 100;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  current = n;
+}}
+
+function revealStep(slideNum, stepNum) {{
+  const el = document.querySelector('#slide-' + slideNum + ' [data-step="' + stepNum + '"]');
+  if (el) el.classList.add('revealed');
+  setCurrentStep(slideNum, stepNum);
+}}
+
+function showLoader(msg, sub, callback) {{
+  const overlay = document.getElementById('loader-overlay');
+  document.getElementById('loader-msg').textContent = msg;
+  document.getElementById('loader-sub').textContent = sub;
+  const bar = document.getElementById('loader-bar');
+  bar.style.width = '0%';
+  overlay.classList.add('visible');
+  setTimeout(() => bar.style.width = '30%', 100);
+  setTimeout(() => bar.style.width = '65%', 500);
+  setTimeout(() => bar.style.width = '90%', 1000);
+  setTimeout(() => bar.style.width = '100%', 1500);
+  setTimeout(() => {{
+    overlay.classList.remove('visible');
+    setTimeout(callback, 300);
+  }}, 1800);
+}}
+
+function advance() {{
+  const steps = getSlideSteps(current);
+  const done  = getCurrentStep(current);
+  if (done < steps) {{
+    const next = done + 1;
+    const key  = current + ',' + next;
+    const msgs = stepMessages[key] || ['Processando...', ''];
+    showLoader(msgs[0], msgs[1], () => revealStep(current, next));
+  }} else if (current < TOTAL) {{
+    showSlide(current + 1);
+  }}
+}}
+
+function retreat() {{
+  if (current > 1) showSlide(current - 1);
+}}
+
+document.addEventListener('keydown', e => {{
+  if (e.key === 'ArrowRight' || e.key === ' ') {{ e.preventDefault(); advance(); }}
+  if (e.key === 'ArrowLeft')                   {{ e.preventDefault(); retreat(); }}
+}});
+
+document.getElementById('nav-next').addEventListener('click', advance);
+document.getElementById('nav-prev').addEventListener('click', retreat);
+
+// RUN buttons
+document.addEventListener('click', e => {{
+  const btn = e.target.closest('.run-btn');
+  if (!btn) return;
+  const msg = btn.getAttribute('data-msg') || 'Executando...';
+  const sub = btn.getAttribute('data-sub') || '';
+  const slideEl = btn.closest('.slide');
+  if (!slideEl) return;
+  const sn = parseInt(slideEl.getAttribute('data-slide'));
+  const done = getCurrentStep(sn);
+  const steps = getSlideSteps(sn);
+  if (done < steps) {{
+    showLoader(msg, sub, () => revealStep(sn, done + 1));
+  }}
+}});
+
+document.addEventListener('DOMContentLoaded', () => {{
+  showSlide(1);
+  document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+}});
+"""
+
+# ─── ASSEMBLE HTML ────────────────────────────────────────────────────────────
+
+html_output = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Company Connection — Análise de Dados | IBMEC 2026.1</title>
+<title>Company Connection — Análise Geográfica · Grupo 5 · IBMEC 2026.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
 <style>
-:root {{
-  --bg: #f4f5f6;
-  --bg-secondary: #e8eaed;
-  --bg-card: #ffffff;
-  --bg-card-hover: #f8f9fa;
-  --border: rgba(52,63,77,0.1);
-  --border-bright: rgba(52,63,77,0.2);
-  --text-primary: #343f4d;
-  --text-secondary: #5a6a7a;
-  --text-muted: #8a9aaa;
-  --accent-blue: #6aadb8;
-  --accent-cyan: #4d9aa8;
-  --accent-amber: #ff4b28;
-  --accent-green: #2aa87a;
-  --accent-red: #ff4b28;
-  --accent-purple: #6aadb8;
-  --gradient-blue: linear-gradient(135deg, #6aadb8, #4d9aa8);
-  --code-bg: #f0f2f4;
-}}
-
-*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-
-html, body {{
-  width: 100%; height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--text-primary);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}}
-
-body {{
-  background-image:
-    linear-gradient(rgba(52,63,77,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(52,63,77,0.04) 1px, transparent 1px);
-  background-size: 40px 40px;
-}}
-
-/* ============ FIXED UI ============ */
-#top-progress {{
-  position: fixed; top: 0; left: 0; right: 0; height: 3px;
-  background: rgba(52,63,77,0.05);
-  z-index: 1000;
-}}
-#top-progress-fill {{
-  height: 100%;
-  background: linear-gradient(90deg, #6aadb8, #ff4b28);
-  transition: width 0.5s cubic-bezier(.4,0,.2,1);
-  box-shadow: 0 0 12px rgba(106,173,184,0.5);
-}}
-
-#chapter-indicator {{
-  position: fixed; top: 20px; left: 28px;
-  font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--text-muted);
-  z-index: 999; display: flex; align-items: center; gap: 8px;
-  transition: opacity 0.3s;
-}}
-#chapter-indicator .dot {{
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--accent-blue);
-  box-shadow: 0 0 8px var(--accent-blue);
-}}
-#chapter-indicator .chapter-text {{ color: var(--accent-blue); }}
-
-#slide-counter {{
-  position: fixed; bottom: 28px; left: 28px;
-  font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
-  color: var(--text-muted); z-index: 999;
-  font-feature-settings: "tnum";
-}}
-
-#nav-arrows {{
-  position: fixed; bottom: 20px; right: 28px;
-  display: flex; gap: 10px; z-index: 999;
-}}
-.nav-btn {{
-  width: 42px; height: 42px; border-radius: 50%;
-  border: 1px solid var(--border-bright);
-  background: rgba(52,63,77,0.05);
-  backdrop-filter: blur(12px);
-  color: var(--text-secondary);
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-size: 16px; transition: all 0.2s ease;
-  user-select: none;
-}}
-.nav-btn:hover {{
-  background: rgba(106,173,184,0.15);
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-  box-shadow: 0 0 20px rgba(106,173,184,0.3);
-}}
-.nav-btn:active {{ transform: scale(0.92); }}
-
-/* ============ PRESENTATION CONTAINER ============ */
-#presentation {{
-  width: 100vw; height: 100vh;
-  position: relative; overflow: hidden;
-}}
-
-.slide {{
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column;
-  padding: 64px 72px 72px;
-  opacity: 0;
-  transform: translateX(100%);
-  transition: transform 0.5s cubic-bezier(.4,0,.2,1), opacity 0.5s ease;
-  pointer-events: none;
-  overflow: hidden;
-}}
-.slide.active {{
-  opacity: 1; transform: translateX(0); pointer-events: all;
-}}
-.slide.exit-left {{
-  opacity: 0; transform: translateX(-100%);
-}}
-
-/* ============ TYPOGRAPHY ============ */
-.slide-title {{
-  font-size: 38px; font-weight: 800;
-  background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  background-clip: text;
-  line-height: 1.15; margin-bottom: 6px;
-}}
-.slide-subtitle {{
-  font-size: 16px; font-weight: 500; color: var(--text-secondary);
-  margin-bottom: 28px; letter-spacing: 0.02em;
-}}
-.slide-subtitle.amber {{ color: var(--accent-amber); }}
-.slide-subtitle.blue {{ color: var(--accent-blue); }}
-.slide-subtitle.purple {{ color: var(--accent-purple); }}
-.context-text {{
-  font-size: 14px; color: var(--text-secondary); line-height: 1.7;
-  font-style: italic; margin-bottom: 22px;
-  padding: 14px 18px; background: var(--bg-card);
-  border-left: 3px solid var(--accent-blue);
-  border-radius: 0 8px 8px 0;
-}}
-
-/* ============ CARDS ============ */
-.glass-card {{
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 24px;
-  backdrop-filter: blur(10px);
-  transition: border-color 0.2s, background 0.2s;
-}}
-.glass-card:hover {{
-  border-color: var(--border-bright);
-  background: var(--bg-card-hover);
-}}
-.card-icon {{ font-size: 28px; margin-bottom: 12px; }}
-.card-title {{ font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; letter-spacing: 0.03em; }}
-.card-body {{ font-size: 13px; color: var(--text-secondary); line-height: 1.65; }}
-
-/* ============ GRIDS ============ */
-.grid-3 {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }}
-.grid-2 {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }}
-.col-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }}
-
-/* ============ STEPS ============ */
-.step {{
-  opacity: 0;
-  transform: translateY(22px);
-  transition: opacity 0.45s ease, transform 0.45s ease;
-}}
-.step.revealed {{
-  opacity: 1; transform: translateY(0);
-}}
-
-/* ============ LOADER ============ */
-#exec-loader {{
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: 0; /* toggled via .visible */
-  background: linear-gradient(to top, rgba(8,12,24,0.98) 60%, transparent 100%);
-  display: flex; align-items: flex-end; justify-content: center;
-  padding-bottom: 90px;
-  z-index: 500;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.2s ease;
-}}
-#exec-loader.visible {{
-  opacity: 1; pointer-events: all;
-  height: 100vh;
-}}
-.exec-loader-inner {{
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-bright);
-  border-radius: 14px;
-  padding: 22px 40px;
-  min-width: 320px;
-  box-shadow: 0 4px 24px rgba(52,63,77,0.12), 0 1px 4px rgba(52,63,77,0.08);
-}}
-.jupyter-cell-indicator {{
-  display: flex; align-items: center; gap: 3px;
-  font-family: 'JetBrains Mono', monospace; font-size: 15px;
-}}
-.cell-bracket {{ color: var(--text-muted); }}
-.cell-star {{
-  color: var(--accent-blue);
-  animation: pulse-star 0.8s ease-in-out infinite alternate;
-}}
-@keyframes pulse-star {{
-  from {{ opacity: 0.4; }}
-  to {{ opacity: 1; text-shadow: 0 0 12px var(--accent-blue); }}
-}}
-.exec-status {{
-  font-size: 12px; color: var(--text-secondary);
-  font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 0.04em;
-}}
-.exec-progress-track {{
-  width: 260px; height: 3px;
-  background: rgba(52,63,77,0.08);
-  border-radius: 2px; overflow: hidden;
-}}
-.exec-progress-fill {{
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, #6aadb8, #ff4b28);
-  border-radius: 2px;
-  box-shadow: 0 0 8px rgba(106,173,184,0.4);
-}}
-.exec-progress-fill.animating {{
-  transition: width 1.2s ease-in-out;
-}}
-
-/* ============ CODE BLOCKS ============ */
-.jupyter-cell {{
-  border-radius: 12px; overflow: hidden;
-  border: 1px solid var(--border);
-  font-family: 'JetBrains Mono', monospace;
-  margin-bottom: 14px;
-}}
-.jupyter-cell-header {{
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 16px;
-  background: rgba(52,63,77,0.03);
-  border-bottom: 1px solid var(--border);
-}}
-.jupyter-in-label {{
-  font-size: 11px; color: var(--accent-blue);
-  font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em;
-}}
-.jupyter-cell pre {{
-  margin: 0 !important; border-radius: 0 !important;
-  background: var(--code-bg) !important;
-  font-size: 12.5px !important; line-height: 1.65 !important;
-  padding: 16px 18px !important;
-  overflow-x: auto;
-}}
-.jupyter-cell pre code {{ font-size: 12.5px !important; }}
-
-.terminal-output {{
-  background: #f0f2f4;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 18px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px; color: #343f4d;
-  line-height: 1.7;
-  overflow-x: auto;
-  margin-bottom: 14px;
-}}
-.terminal-output .out-label {{
-  font-size: 10px; color: var(--text-muted);
-  margin-bottom: 6px; letter-spacing: 0.08em;
-}}
-
-/* ============ DATA TABLE ============ */
-.data-table {{
-  width: 100%; border-collapse: collapse;
-  font-size: 12.5px; border-radius: 10px; overflow: hidden;
-  border: 1px solid var(--border);
-}}
-.data-table th {{
-  background: rgba(52,63,77,0.05);
-  padding: 10px 14px; text-align: left;
-  font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--text-secondary);
-  border-bottom: 1px solid var(--border);
-}}
-.data-table td {{
-  padding: 9px 14px; border-bottom: 1px solid rgba(52,63,77,0.04);
-  color: var(--text-primary); vertical-align: middle;
-}}
-.data-table tr:last-child td {{ border-bottom: none; }}
-.data-table tr.row-amber td {{ background: rgba(255,75,40,0.06); }}
-.data-table tr.row-green td {{ background: rgba(16,185,129,0.06); }}
-.data-table tr.row-blue td {{ background: rgba(106,173,184,0.08); }}
-.data-table tr.row-red td {{ background: rgba(255,75,40,0.06); }}
-
-/* ============ STAT CARDS ============ */
-.stat-card {{
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 18px 22px;
-  text-align: center;
-}}
-.stat-label {{ font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }}
-.stat-value {{ font-size: 28px; font-weight: 800; line-height: 1.1; margin-bottom: 4px; }}
-.stat-sub {{ font-size: 11px; color: var(--text-secondary); }}
-.stat-card.blue .stat-value {{ color: var(--accent-blue); }}
-.stat-card.green .stat-value {{ color: var(--accent-green); }}
-.stat-card.red .stat-value {{ color: var(--accent-red); }}
-.stat-card.amber .stat-value {{ color: var(--accent-amber); }}
-
-/* ============ CALLOUT / INSIGHT ============ */
-.callout {{
-  background: rgba(255,75,40,0.08);
-  border: 1px solid rgba(255,75,40,0.25);
-  border-left: 4px solid var(--accent-amber);
-  border-radius: 0 10px 10px 0;
-  padding: 14px 18px;
-  font-size: 13.5px; color: var(--text-primary);
-  line-height: 1.65; font-style: italic;
-  margin-top: 14px;
-}}
-.callout.blue {{
-  background: rgba(106,173,184,0.08);
-  border-color: rgba(106,173,184,0.3);
-  border-left-color: var(--accent-blue);
-}}
-.callout.green {{
-  background: rgba(16,185,129,0.06);
-  border-color: rgba(16,185,129,0.2);
-  border-left-color: var(--accent-green);
-}}
-
-/* ============ CHIPS ============ */
-.chip {{
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 12px; border-radius: 20px;
-  font-size: 12px; font-weight: 600; letter-spacing: 0.03em;
-}}
-.chip.blue {{ background: rgba(106,173,184,0.12); color: var(--accent-blue); border: 1px solid rgba(106,173,184,0.2); }}
-.chip.amber {{ background: rgba(255,75,40,0.12); color: var(--accent-amber); border: 1px solid rgba(255,75,40,0.2); }}
-.chip.green {{ background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.2); }}
-.chip.red {{ background: rgba(255,75,40,0.12); color: var(--accent-red); border: 1px solid rgba(255,75,40,0.2); }}
-.chip.purple {{ background: rgba(106,173,184,0.12); color: var(--accent-purple); border: 1px solid rgba(106,173,184,0.2); }}
-.chip.muted {{ background: rgba(52,63,77,0.05); color: var(--text-secondary); border: 1px solid var(--border); }}
-
-/* ============ IMAGE CONTAINERS ============ */
-.chart-img {{
-  width: 100%; height: auto; max-height: 50vh;
-  object-fit: contain; border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  display: block;
-}}
-.chart-img.tall {{ max-height: 55vh; }}
-.chart-img.full {{ max-height: 60vh; }}
-
-/* ============ SLIDE-SPECIFIC STYLES ============ */
-
-/* Slide 1 — Hook */
-.slide-hook {{
-  display: flex !important; flex-direction: column;
-  align-items: center; justify-content: center;
-  text-align: center;
-  background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(106,173,184,0.1) 0%, transparent 70%);
-  padding: 40px !important;
-}}
-.hook-num {{
-  font-size: clamp(80px, 12vw, 130px); font-weight: 900;
-  line-height: 1; letter-spacing: -0.04em;
-  color: var(--text-primary);
-  animation: fadeInUp 0.7s ease 0.1s both;
-}}
-.hook-line-2 {{
-  font-size: clamp(36px, 5vw, 62px); font-weight: 300;
-  color: var(--text-secondary); letter-spacing: -0.02em;
-  animation: fadeInUp 0.7s ease 0.4s both;
-}}
-.hook-line-3 {{
-  font-size: clamp(22px, 3vw, 42px); font-weight: 600;
-  color: var(--accent-amber);
-  animation: fadeInUp 0.7s ease 0.7s both;
-  margin-top: 12px;
-}}
-.hook-line-4 {{
-  font-size: clamp(14px, 1.8vw, 22px); color: var(--text-muted);
-  font-weight: 400; max-width: 600px;
-  animation: fadeInUp 0.7s ease 1.0s both;
-  margin-top: 10px;
-}}
-.hook-line-5 {{
-  font-size: clamp(18px, 2.2vw, 30px); color: var(--accent-blue);
-  font-style: italic; font-weight: 600;
-  animation: fadeInUp 0.7s ease 1.3s both;
-  margin-top: 14px;
-}}
-.hook-hint {{
-  margin-top: 40px;
-  font-size: 12px; color: var(--text-muted);
-  letter-spacing: 0.1em; text-transform: uppercase;
-  animation: blink 2s ease-in-out 2s infinite;
-}}
-@keyframes blink {{
-  0%, 100% {{ opacity: 0.3; }}
-  50% {{ opacity: 1; }}
-}}
-@keyframes fadeInUp {{
-  from {{ opacity: 0; transform: translateY(30px); }}
-  to {{ opacity: 1; transform: translateY(0); }}
-}}
-
-/* Slide 5 — Big number */
-.big-pct {{
-  font-size: clamp(80px, 14vw, 140px); font-weight: 900;
-  letter-spacing: -0.04em; line-height: 1;
-  background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  background-clip: text;
-  filter: drop-shadow(0 0 40px rgba(106,173,184,0.25));
-  text-align: center;
-}}
-
-/* Pipeline nodes */
-.pipeline-wrap {{
-  display: flex; flex-direction: column; gap: 16px;
-  margin-top: 10px;
-}}
-.pipeline-row {{
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-}}
-.pipeline-node {{
-  display: flex; flex-direction: column; align-items: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 16px;
-  min-width: 80px; text-align: center;
-  font-size: 11px;
-}}
-.pipeline-node .node-num {{
-  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
-  margin-bottom: 4px;
-}}
-.pipeline-node .node-label {{
-  font-size: 11px; font-weight: 500; color: var(--text-primary);
-}}
-.pipeline-node.blue {{ border-color: rgba(106,173,184,0.25); }}
-.pipeline-node.blue .node-num {{ color: var(--accent-blue); }}
-.pipeline-node.purple {{ border-color: rgba(106,173,184,0.25); }}
-.pipeline-node.purple .node-num {{ color: var(--accent-purple); }}
-.pipeline-node.teal {{ border-color: rgba(6,182,212,0.3); }}
-.pipeline-node.teal .node-num {{ color: var(--accent-cyan); }}
-.pipeline-node.amber {{ border-color: rgba(255,75,40,0.25); }}
-.pipeline-node.amber .node-num {{ color: var(--accent-amber); }}
-.pipeline-node.green {{ border-color: rgba(16,185,129,0.3); }}
-.pipeline-node.green .node-num {{ color: var(--accent-green); }}
-.pipeline-arrow {{ color: var(--text-muted); font-size: 16px; flex-shrink: 0; }}
-.pipeline-group-label {{
-  font-size: 9px; font-weight: 700; letter-spacing: 0.15em;
-  text-transform: uppercase; margin-bottom: 6px;
-}}
-
-/* Contrast boxes slide 3 */
-.contrast-box {{
-  border-radius: 12px; padding: 20px 24px;
-}}
-.contrast-box.red-tint {{
-  background: rgba(255,75,40,0.07);
-  border: 1px solid rgba(255,75,40,0.2);
-}}
-.contrast-box.green-tint {{
-  background: rgba(16,185,129,0.07);
-  border: 1px solid rgba(16,185,129,0.2);
-}}
-.contrast-box-title {{
-  font-size: 13px; font-weight: 700; margin-bottom: 10px;
-  letter-spacing: 0.05em;
-}}
-.contrast-box.red-tint .contrast-box-title {{ color: var(--accent-red); }}
-.contrast-box.green-tint .contrast-box-title {{ color: var(--accent-green); }}
-.contrast-box ul {{
-  list-style: none; padding: 0;
-}}
-.contrast-box ul li {{
-  font-size: 12.5px; color: var(--text-secondary);
-  padding: 4px 0; border-bottom: 1px solid rgba(52,63,77,0.04);
-  line-height: 1.5;
-}}
-.contrast-box ul li:last-child {{ border-bottom: none; }}
-
-/* Strikethrough list */
-.strike-list {{ list-style: none; padding: 0; }}
-.strike-list li {{
-  font-size: 12.5px; padding: 5px 0;
-  color: var(--text-muted);
-  text-decoration: line-through;
-  border-bottom: 1px solid rgba(52,63,77,0.03);
-}}
-.clean-list {{ list-style: none; padding: 0; }}
-.clean-list li {{
-  font-size: 12.5px; padding: 5px 0;
-  color: var(--text-primary);
-  border-bottom: 1px solid rgba(52,63,77,0.04);
-  display: flex; align-items: center; gap: 8px;
-}}
-.clean-list li::before {{
-  content: '▸'; color: var(--accent-cyan); font-size: 10px;
-}}
-
-/* Col header */
-.col-header {{
-  font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
-  padding: 8px 14px; border-radius: 8px; margin-bottom: 14px;
-  display: inline-block;
-}}
-.col-header.red {{ background: rgba(255,75,40,0.1); color: var(--accent-red); }}
-.col-header.green {{ background: rgba(16,185,129,0.1); color: var(--accent-green); }}
-
-/* Pull quote */
-.pull-quote {{
-  font-size: clamp(16px, 2.5vw, 24px); font-weight: 500;
-  color: var(--accent-amber);
-  text-align: center;
-  line-height: 1.55;
-  border-top: 1px solid rgba(255,75,40,0.2);
-  border-bottom: 1px solid rgba(255,75,40,0.2);
-  padding: 24px 40px; margin: 20px 0;
-  background: rgba(255,75,40,0.04);
-  border-radius: 0;
-}}
-.pull-quote::before {{ content: '\\201C'; font-size: 1.4em; opacity: 0.5; margin-right: 4px; }}
-.pull-quote::after {{ content: '\\201D'; font-size: 1.4em; opacity: 0.5; margin-left: 4px; }}
-
-/* Stat row */
-.stat-row {{
-  display: flex; align-items: center; gap: 8px;
-  justify-content: center; flex-wrap: wrap;
-  margin-top: 16px;
-}}
-.stat-row-item {{
-  font-size: 12px; color: var(--text-muted); padding: 5px 12px;
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 20px;
-}}
-.stat-row-item strong {{ color: var(--text-secondary); font-weight: 600; }}
-.stat-row-sep {{ color: var(--text-muted); opacity: 0.4; }}
-
-/* Recommendation lists */
-.rec-card {{
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden; display: flex; flex-direction: column;
-}}
-.rec-card-header {{
-  padding: 14px 18px;
-  font-size: 13px; font-weight: 700;
-  letter-spacing: 0.03em;
-}}
-.rec-card-header.green {{ background: rgba(16,185,129,0.12); color: var(--accent-green); }}
-.rec-card-header.red {{ background: rgba(255,75,40,0.12); color: var(--accent-red); }}
-.rec-card-header.blue {{ background: rgba(106,173,184,0.12); color: var(--accent-blue); }}
-.rec-badge {{
-  display: inline-block; padding: 3px 10px; border-radius: 20px;
-  font-size: 11px; font-weight: 600; margin-bottom: 6px;
-}}
-.rec-badge.green {{ background: rgba(16,185,129,0.15); color: var(--accent-green); }}
-.rec-badge.red {{ background: rgba(255,75,40,0.15); color: var(--accent-red); }}
-.rec-badge.blue {{ background: rgba(106,173,184,0.15); color: var(--accent-blue); }}
-.rec-desc {{ font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }}
-.rec-card-body {{ padding: 14px 18px; flex: 1; }}
-.rec-list {{ list-style: none; padding: 0; }}
-.rec-list li {{
-  font-size: 11.5px; padding: 5px 0;
-  color: var(--text-secondary);
-  border-bottom: 1px solid rgba(52,63,77,0.04);
-  display: flex; justify-content: space-between; align-items: center;
-}}
-.rec-list li:last-child {{ border-bottom: none; }}
-.rec-list li .name {{ font-weight: 600; color: var(--text-primary); }}
-.rec-list li .stats {{ font-size: 10.5px; color: var(--text-muted); }}
-.rec-card-footer {{ padding: 12px 18px; border-top: 1px solid var(--border); }}
-
-/* Action plan */
-.priority-badge {{
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; border-radius: 50%;
-  font-size: 11px; font-weight: 700;
-  background: rgba(106,173,184,0.15);
-  color: var(--accent-blue); flex-shrink: 0;
-}}
-.action-row {{
-  display: grid;
-  grid-template-columns: 30px 1fr 100px 80px 1fr 130px;
-  gap: 10px; align-items: center;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  margin-bottom: 6px;
-}}
-.action-row .bairro-name {{ font-weight: 700; color: var(--text-primary); font-size: 12.5px; }}
-.action-row .cat-tag {{
-  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
-  padding: 2px 8px; border-radius: 4px;
-  text-align: center;
-}}
-.cat-tag.reativacao {{ background: rgba(255,75,40,0.12); color: var(--accent-red); }}
-.cat-tag.manutencao {{ background: rgba(16,185,129,0.12); color: var(--accent-green); }}
-.action-row .potencial {{ font-size: 11px; color: var(--text-secondary); }}
-.action-row .acao {{ font-size: 11.5px; color: var(--text-primary); }}
-.action-row .canal {{ font-size: 10.5px; color: var(--accent-blue); }}
-.action-header {{
-  display: grid;
-  grid-template-columns: 30px 1fr 100px 80px 1fr 130px;
-  gap: 10px;
-  padding: 6px 14px;
-  font-size: 9px; font-weight: 700;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}}
-
-/* Budget bars */
-.budget-bar-wrap {{
-  display: flex; align-items: stretch;
-  border-radius: 10px; overflow: hidden;
-  height: 36px; margin-bottom: 22px;
-  border: 1px solid var(--border);
-}}
-.budget-segment {{
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
-  transition: flex 0.3s;
-}}
-.budget-segment.amber {{ background: rgba(255,75,40,0.2); color: var(--accent-amber); flex: 50; }}
-.budget-segment.green {{ background: rgba(16,185,129,0.15); color: var(--accent-green); flex: 35; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }}
-.budget-segment.blue {{ background: rgba(106,173,184,0.12); color: var(--accent-blue); flex: 15; }}
-
-/* Closing */
-.slide-closing {{
-  display: flex !important; flex-direction: column;
-  align-items: center; justify-content: center;
-  text-align: center;
-  background: radial-gradient(ellipse 70% 50% at 50% 50%, rgba(106,173,184,0.08) 0%, transparent 70%);
-}}
-.closing-title {{
-  font-size: clamp(24px, 4vw, 44px); font-weight: 800;
-  color: var(--text-primary); margin-bottom: 8px;
-  line-height: 1.2;
-}}
-.closing-subtitle {{
-  font-size: clamp(20px, 3vw, 36px); font-weight: 700;
-  background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 36px;
-}}
-.feature-cards {{ display: flex; gap: 16px; margin-bottom: 32px; justify-content: center; }}
-.feature-card {{
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 14px; padding: 22px 20px; max-width: 230px;
-  text-align: left;
-}}
-.feature-card .icon {{ font-size: 26px; margin-bottom: 10px; }}
-.feature-card .title {{ font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }}
-.feature-card .desc {{ font-size: 12px; color: var(--text-secondary); line-height: 1.6; }}
-.group-info {{ font-size: 11px; color: var(--text-muted); line-height: 1.8; }}
-.group-info .course {{ font-size: 10px; color: var(--text-muted); opacity: 0.6; }}
-
-/* Dimensions chips */
-.dim-chips {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }}
-
-/* Section header */
-.section-head {{
-  font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--text-muted);
-  margin-bottom: 12px; margin-top: 6px;
-}}
-
-/* Scrollable area for charts */
-.chart-scroll {{
-  flex: 1; overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(52,63,77,0.1) transparent;
-}}
-
-/* Two-decision cards */
-.decision-card {{
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 10px; padding: 14px 18px; margin-bottom: 10px;
-}}
-.decision-card .dc-title {{
-  font-size: 12px; font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-  margin-bottom: 6px;
-}}
-.decision-card.amber .dc-title {{ color: var(--accent-amber); }}
-.decision-card.blue .dc-title {{ color: var(--accent-blue); }}
-.decision-card .dc-body {{ font-size: 12px; color: var(--text-secondary); line-height: 1.6; }}
-
+{CSS}
 </style>
 </head>
 <body>
 
-<!-- FIXED UI -->
-<div id="top-progress"><div id="top-progress-fill" style="width:4.5%"></div></div>
+<div id="progress-bar"></div>
+<span id="slide-counter">1 / {TOTAL}</span>
+<button id="nav-prev" title="Anterior">&#8592;</button>
+<button id="nav-next" title="Próximo">&#8594;</button>
 
-<div id="chapter-indicator">
-  <div class="dot"></div>
-  <span class="chapter-text" id="chapter-text"></span>
-</div>
-
-<div id="slide-counter">01 / 22</div>
-
-<div id="nav-arrows">
-  <button class="nav-btn" id="btn-prev" title="Slide anterior" onclick="retreat()">&#8592;</button>
-  <button class="nav-btn" id="btn-next" title="Próximo" onclick="advance()">&#8594;</button>
-</div>
-
-<!-- LOADER -->
-<div id="exec-loader">
-  <div class="exec-loader-inner">
-    <div class="jupyter-cell-indicator">
-      <span class="cell-bracket">In [</span>
-      <span class="cell-star">*</span>
-      <span class="cell-bracket">]:</span>
-    </div>
-    <div class="exec-status" id="loader-status">Executando célula Python...</div>
-    <div class="exec-progress-track">
-      <div class="exec-progress-fill" id="loader-progress"></div>
-    </div>
+<!-- LOADER OVERLAY -->
+<div id="loader-overlay">
+  <div class="loader-inner">
+    <div class="loader-ring"></div>
+    <div id="loader-msg">Executando...</div>
+    <div id="loader-sub"></div>
+    <div class="loader-track"><div id="loader-bar"></div></div>
   </div>
 </div>
 
-<!-- PRESENTATION -->
-<div id="presentation">
-
-<!-- ========== SLIDE 1: HOOK ========== -->
-<div class="slide slide-hook active" data-slide="1" data-steps="0" data-chapter="">
-  <div class="hook-num">100.365</div>
-  <div class="hook-line-2">registros.</div>
-  <div class="hook-line-3">Nenhuma análise.</div>
-  <div class="hook-line-4">Nenhuma decisão de marketing baseada em dados.</div>
-  <div class="hook-line-5">Até agora.</div>
-  <div class="hook-hint">Pressione → para começar</div>
+<!-- SLIDES -->
+<div id="deck">
+{"".join(ALL_SLIDES)}
 </div>
-
-<!-- ========== SLIDE 2: O CLIENTE ========== -->
-<div class="slide" data-slide="2" data-steps="0" data-chapter="01 — O Cliente">
-  <div class="slide-title">Company Connection</div>
-  <div class="slide-subtitle amber">Sorteios legalizados para influenciadores digitais</div>
-  <div class="grid-3" style="flex:1;align-items:start;margin-top:12px;">
-    <div class="glass-card">
-      <div class="card-icon">🎯</div>
-      <div class="card-title">O Produto</div>
-      <div class="card-body">Participantes compram títulos de capitalização ou bilhetes lotéricos e concorrem a prêmios. Modelo escalável, digital, focado em influência.</div>
-    </div>
-    <div class="glass-card">
-      <div class="card-icon">📱</div>
-      <div class="card-title">O Mercado</div>
-      <div class="card-body">Influenciadores digitais como canal de venda. Base de participantes construída via redes sociais e marketing de influência.</div>
-    </div>
-    <div class="glass-card">
-      <div class="card-icon">📊</div>
-      <div class="card-title">O Desafio</div>
-      <div class="card-body">Empresa fundada em 2024. Crescimento rápido, mas sem inteligência de dados. Decisões tomadas no feeling.</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 3: O PROBLEMA ========== -->
-<div class="slide" data-slide="3" data-steps="0" data-chapter="01 — O Cliente">
-  <div class="slide-title">Decisão no Feeling</div>
-  <div class="pull-quote">Eles copiavam o que outros influenciadores faziam — sem olhar o próprio público.</div>
-  <div class="col-2" style="margin-top:10px;">
-    <div class="contrast-box red-tint">
-      <div class="contrast-box-title">Antes</div>
-      <ul><li>Orçamento de mídia distribuído igualmente</li><li>Sem saber onde os clientes estão</li><li>Sem saber quem ainda compra</li></ul>
-    </div>
-    <div class="contrast-box green-tint">
-      <div class="contrast-box-title">O que análise de dados muda</div>
-      <ul><li>Direcionar orçamento por bairro</li><li>Identificar onde reativar</li><li>Identificar onde expandir</li></ul>
-    </div>
-  </div>
-  <div class="stat-row" style="margin-top:20px;">
-    <div class="stat-row-item"><strong>100.365 registros</strong></div>
-    <span class="stat-row-sep">·</span>
-    <div class="stat-row-item">nunca analisados</div>
-    <span class="stat-row-sep">·</span>
-    <div class="stat-row-item">disponíveis desde 2024</div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 4: A BASE DE DADOS ========== -->
-<div class="slide" data-slide="4" data-steps="1" data-chapter="02 — Os Dados">
-  <div class="slide-title">O Que Esperávamos vs. O Que Encontramos</div>
-  <div class="col-2" style="margin-top:16px;">
-    <div>
-      <div class="col-header red">❌ O que a proposta assumia</div>
-      <ul class="strike-list">
-        <li>Faixa etária</li><li>Número de telefone</li><li>CPF</li><li>E-mail</li>
-        <li>Histórico completo de compras</li><li>Distribuição nacional</li>
-      </ul>
-    </div>
-    <div>
-      <div class="col-header green">✅ O que realmente tínhamos</div>
-      <ul class="clean-list">
-        <li><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);">bairro</code></li>
-        <li><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);">cidade</code></li>
-        <li><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);">uf</code></li>
-        <li><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);">cep</code></li>
-        <li><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);">ultima_compra</code></li>
-      </ul>
-    </div>
-  </div>
-  <div class="step step-1" style="margin-top:22px;">
-    <div class="callout">"Com apenas 5 colunas — todas geográficas ou temporais — construímos uma análise completa de segmentação. Limitação virou foco."</div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 5: O ACHADO ========== -->
-<div class="slide" data-slide="5" data-steps="1" data-chapter="02 — Os Dados">
-  <div class="slide-title">99,7% dos Participantes</div>
-  <div class="slide-subtitle blue">estão no Rio de Janeiro</div>
-  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
-    <div class="big-pct">99.7%</div>
-    <div class="stat-row">
-      <div class="stat-row-item"><strong>82.875 registros</strong></div>
-      <span class="stat-row-sep">·</span>
-      <div class="stat-row-item">no RJ</div>
-      <span class="stat-row-sep">·</span>
-      <div class="stat-row-item">contra apenas ~200 no resto do Brasil</div>
-    </div>
-    <div class="step step-1" style="width:100%;max-width:680px;">
-      <div class="callout">"Essa descoberta mudou tudo. Em vez de uma análise nacional rasa, fizemos uma análise profunda do mercado fluminense — bairro por bairro."</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 6: O PIPELINE ========== -->
-<div class="slide" data-slide="6" data-steps="0" data-chapter="03 — A Solução">
-  <div class="slide-title">O Pipeline de Análise</div>
-  <div class="slide-subtitle">10 blocos, do dado bruto à decisão</div>
-  <div class="pipeline-wrap" style="flex:1;justify-content:center;">
-    <div>
-      <div class="pipeline-group-label" style="color:var(--accent-blue);">Fundação</div>
-      <div class="pipeline-row">
-        <div class="pipeline-node blue"><span class="node-num">0</span><span class="node-label">Parâmetros</span></div>
-        <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node blue"><span class="node-num">1</span><span class="node-label">Carga</span></div>
-        <div class="pipeline-arrow" style="margin-left:12px;color:var(--accent-purple);">⟹</div>
-      </div>
-    </div>
-    <div>
-      <div class="pipeline-group-label" style="color:var(--accent-purple);">Preparação</div>
-      <div class="pipeline-row">
-        <div class="pipeline-node purple"><span class="node-num">2</span><span class="node-label">Limpeza</span></div>
-        <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node purple"><span class="node-num">3</span><span class="node-label">Engenharia</span></div>
-        <div class="pipeline-arrow" style="margin-left:12px;color:var(--accent-cyan);">⟹</div>
-      </div>
-    </div>
-    <div>
-      <div class="pipeline-group-label" style="color:var(--accent-cyan);">Exploração</div>
-      <div class="pipeline-row">
-        <div class="pipeline-node teal"><span class="node-num">4</span><span class="node-label">EDA</span></div>
-        <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node teal"><span class="node-num">5</span><span class="node-label">Heatmaps</span></div>
-        <div class="pipeline-arrow" style="margin-left:12px;color:var(--accent-amber);">⟹</div>
-      </div>
-    </div>
-    <div>
-      <div class="pipeline-group-label" style="color:var(--accent-amber);">Modelos</div>
-      <div class="pipeline-row">
-        <div class="pipeline-node amber"><span class="node-num">6</span><span class="node-label">K-Means</span></div>
-        <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node amber"><span class="node-num">7</span><span class="node-label">Árvore</span></div>
-        <div class="pipeline-arrow" style="margin-left:12px;color:var(--accent-green);">⟹</div>
-      </div>
-    </div>
-    <div>
-      <div class="pipeline-group-label" style="color:var(--accent-green);">Entrega</div>
-      <div class="pipeline-row">
-        <div class="pipeline-node green"><span class="node-num">8</span><span class="node-label">Recomendações</span></div>
-        <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node green"><span class="node-num">9</span><span class="node-label">Plano</span></div>
-        <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node green"><span class="node-num">10</span><span class="node-label">Export</span></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 7: BLOCO 1 CARREGAMENTO ========== -->
-<div class="slide" data-slide="7" data-steps="2" data-chapter="03 — A Solução" data-step-types="code,output">
-  <div class="slide-title">Bloco 1 — Carregamento dos Dados</div>
-  <div class="context-text">"Lemos o CSV e fazemos a primeira inspeção. O objetivo é entender a escala e o estado bruto da base antes de qualquer transformação."</div>
-  <div class="chart-scroll">
-    <div class="step step-1">
-      <div class="jupyter-cell">
-        <div class="jupyter-cell-header">
-          <span class="jupyter-in-label">In [1]:</span>
-          <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">bloco_01_carga.py</span>
-        </div>
-        <pre><code class="language-python">df = pd.read_csv(CAMINHO_CSV)
-
-print('Total de linhas:', len(df))
-print('Total de colunas:', df.shape[1])
-print('Colunas:', list(df.columns))</code></pre>
-      </div>
-    </div>
-    <div class="step step-2">
-      <div class="terminal-output">
-        <div class="out-label">Out [1]:</div>
-Total de linhas: 100365
-Total de colunas: 5
-Colunas: ['bairro', 'cidade', 'uf', 'cep', 'ultima_compra']
-      </div>
-      <table class="data-table" style="margin-top:8px;">
-        <thead><tr><th>bairro</th><th>cidade</th><th>uf</th><th>cep</th><th>ultima_compra</th></tr></thead>
-        <tbody>
-          <tr><td>Largo da Batalha</td><td>Niterói</td><td>RJ</td><td>24310460</td><td>2024-08-24</td></tr>
-          <tr><td>Mutondo</td><td><em style="color:var(--text-muted)">NaN</em></td><td><em style="color:var(--text-muted)">NaN</em></td><td>24450660</td><td>2024-08-31</td></tr>
-          <tr><td>Fonseca</td><td>Niterói</td><td>RJ</td><td>24130390</td><td>2022-12-03</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 8: BLOCO 2 LIMPEZA ========== -->
-<div class="slide" data-slide="8" data-steps="2" data-chapter="03 — A Solução" data-step-types="code,output">
-  <div class="slide-title">Bloco 2 — Limpeza e Padronização</div>
-  <div class="context-text">"Dados reais vêm sujos. 'Rio de Janeiro' e 'RIO DE JANEIRO' são a mesma cidade — mas para um modelo são duas. Precisamos corrigir isso antes de qualquer análise."</div>
-  <div class="chart-scroll">
-    <div class="step step-1">
-      <div class="jupyter-cell">
-        <div class="jupyter-cell-header">
-          <span class="jupyter-in-label">In [2]:</span>
-          <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">bloco_02_limpeza.py</span>
-        </div>
-        <pre><code class="language-python"># Padronização: caixa alta + sem espaços extras
-df['cidade'] = df['cidade'].str.upper().str.strip()
-df['bairro'] = df['bairro'].str.upper().str.strip()
-
-# Remove acentos (NITERÓI → NITEROI)
-df['cidade'] = df['cidade'].str.normalize('NFKD') \\
-    .str.encode('ascii', errors='ignore').str.decode('utf-8')
-
-# Marca UFs inválidas como nulo
-ufs_validas = ['AC','AL','AP','AM','BA','CE','DF','ES','GO',
-               'MA','MT','MS','MG','PA','PB','PR','PE','PI',
-               'RJ','RN','RS','RO','RR','SC','SP','SE','TO']
-df.loc[~df['uf'].isin(ufs_validas), 'uf'] = None
-
-# Converte data de texto para datetime
-df['ultima_compra'] = pd.to_datetime(df['ultima_compra'])</code></pre>
-      </div>
-    </div>
-    <div class="step step-2">
-      <div class="terminal-output">
-        <div class="out-label">Out [2]:</div>
-UFs encontradas após a limpeza:
-RJ    82875
-SP       47
-MG       16
-DF       15
-...
-
-Data mais antiga:  2022-12-03
-Data mais recente: 2025-07-06
-      </div>
-      <div class="callout" style="margin-top:10px;">"Após limpeza: 99,7% dos registros válidos pertencem ao RJ."</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 9: BLOCO 3 ENGENHARIA ========== -->
-<div class="slide" data-slide="9" data-steps="2" data-chapter="03 — A Solução" data-step-types="code,output">
-  <div class="slide-title">Bloco 3 — Engenharia de Variáveis</div>
-  <div class="context-text">"A base original não tem 'comportamento' — só datas. Transformamos datas em inteligência: criamos recência, status e CEP-3."</div>
-  <div class="chart-scroll">
-    <div class="step step-1">
-      <div class="jupyter-cell">
-        <div class="jupyter-cell-header">
-          <span class="jupyter-in-label">In [3]:</span>
-          <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">bloco_03_engenharia.py</span>
-        </div>
-        <pre><code class="language-python"># Recência: dias desde a última compra
-data_corte = df['ultima_compra'].max()
-df['recencia_dias'] = (data_corte - df['ultima_compra']).dt.days
-
-# Status: RECENTE (≤ 365 dias) ou ANTIGO
-df['status_recente'] = 'ANTIGO'
-df.loc[df['recencia_dias'] &lt;= 365, 'status_recente'] = 'RECENTE'
-
-# CEP-3: sub-região postal (primeiros 3 dígitos)
-df['cep3'] = df['cep'].astype(str).str[:3]</code></pre>
-      </div>
-    </div>
-    <div class="step step-2">
-      <div class="grid-3" style="margin-top:8px;">
-        <div class="stat-card blue">
-          <div class="stat-label">Recência média</div>
-          <div class="stat-value">479 dias</div>
-          <div class="stat-sub">Mediana: 470 dias</div>
-        </div>
-        <div class="stat-card red">
-          <div class="stat-label">Clientes ANTIGOS</div>
-          <div class="stat-value">64.355</div>
-          <div class="stat-sub">77,7% da base</div>
-        </div>
-        <div class="stat-card green">
-          <div class="stat-label">Clientes RECENTES</div>
-          <div class="stat-value">18.520</div>
-          <div class="stat-sub">22,3% da base</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 10: EDA ONDE ESTÃO ========== -->
-<div class="slide" data-slide="10" data-steps="2" data-chapter="04 — O Que Descobrimos" data-step-types="chart,chart">
-  <div class="slide-title" style="font-size:30px;">A Zona Oeste Domina</div>
-  <div class="context-text">"Campo Grande, Santa Cruz, Bangu. Os 'grandes celeiros' da Company Connection estão na Zona Oeste do Rio — não na Zona Sul como muitos imaginariam."</div>
-  <div class="chart-scroll" style="flex:1;">
-    <div class="step step-1">
-      <img class="chart-img" src="data:image/png;base64,{b64['cidades']}" alt="Top 15 cidades">
-    </div>
-    <div class="step step-2" style="margin-top:14px;">
-      <img class="chart-img" src="data:image/png;base64,{b64['bairros']}" alt="Top 20 bairros">
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 11: EDA QUANDO COMPRARAM ========== -->
-<div class="slide" data-slide="11" data-steps="1" data-chapter="04 — O Que Descobrimos" data-step-types="chart">
-  <div class="slide-title" style="font-size:30px;">O Produto Cresceu em 2024 — e Parou</div>
-  <div class="context-text">"O Cap Mania teve seu auge em meados de 2024 e foi descontinuado. O gráfico conta a história: crescimento, pico, e depois silêncio. Isso explica por que 77% da base está 'dormente'."</div>
-  <div class="chart-scroll" style="flex:1;">
-    <div class="step step-1">
-      <img class="chart-img full" src="data:image/png;base64,{b64['temporal']}" alt="Evolução temporal">
-      <div class="callout" style="margin-top:12px;">"O pico de atividade coincide com lançamentos de sorteios em 2024. A base existe — só precisa ser reativada."</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 12: EDA QUEM AINDA COMPRA ========== -->
-<div class="slide" data-slide="12" data-steps="2" data-chapter="04 — O Que Descobrimos" data-step-types="chart,output">
-  <div class="slide-title" style="font-size:30px;">77% Dormentes. 23% Ativos.</div>
-  <div class="context-text">"Definimos como 'recente' qualquer compra nos últimos 365 dias. A distribuição é clara: a maioria da base não compra há mais de um ano — mas ainda existe e pode ser reativada."</div>
-  <div class="chart-scroll" style="flex:1;">
-    <div class="step step-1">
-      <div class="grid-2">
-        <img class="chart-img" src="data:image/png;base64,{b64['pizza']}" alt="Distribuição RECENTE vs ANTIGO">
-        <img class="chart-img" src="data:image/png;base64,{b64['histograma']}" alt="Histograma de recência">
-      </div>
-    </div>
-    <div class="step step-2">
-      <div class="callout" style="margin-top:14px;">"A linha vermelha no histograma marca o corte de 365 dias. A maioria está muito além dela — candidatos à reativação."</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 13: HEATMAPS ========== -->
-<div class="slide" data-slide="13" data-steps="3" data-chapter="04 — O Que Descobrimos" data-step-types="chart,chart,chart">
-  <div class="slide-title" style="font-size:30px;">Onde Estão os Ativos — Bairro por Bairro</div>
-  <div class="context-text">"O heatmap cruza bairro com status. Calor intenso = muitos clientes naquela combinação. Bairros com calor em ANTIGO são candidatos à reativação."</div>
-  <div class="chart-scroll" style="flex:1;">
-    <div class="step step-1" style="margin-bottom:14px;">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">5.1 — Top regiões postais (CEP-3)</div>
-      <img class="chart-img" src="data:image/png;base64,{b64['cep3']}" alt="Top CEP-3">
-    </div>
-    <div class="grid-2">
-      <div class="step step-2">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">5.2 — Heatmap bairros × status</div>
-        <img class="chart-img" src="data:image/png;base64,{b64['heatmap_bairros']}" alt="Heatmap bairros × status">
-      </div>
-      <div class="step step-3">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">5.3 — Heatmap CEP-3 × status</div>
-        <img class="chart-img" src="data:image/png;base64,{b64['heatmap_cep3']}" alt="Heatmap CEP-3 × status">
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 14: K-MEANS A PERGUNTA ========== -->
-<div class="slide" data-slide="14" data-steps="0" data-chapter="05 — Os Modelos">
-  <div class="slide-title">Modelo 1: K-Means</div>
-  <div class="slide-subtitle blue">"Que tipos de bairros existem nesta base?"</div>
-  <div class="col-2" style="flex:1;align-items:start;margin-top:10px;">
-    <div class="glass-card">
-      <div class="card-title" style="margin-bottom:12px;">O Algoritmo</div>
-      <div class="card-body">"K-Means é um algoritmo não supervisionado. Ele não precisa de 'respostas certas' — descobre padrões sozinho. Pedimos para ele agrupar os 323 bairros do RJ em grupos similares, com base em três dimensões:"</div>
-      <div class="dim-chips" style="margin-top:14px;">
-        <span class="chip blue">📊 Volume <small style="margin-left:4px;opacity:.7;">total de participantes</small></span>
-        <span class="chip amber">📅 Recência mediana <small style="margin-left:4px;opacity:.7;">tempo médio sem comprar</small></span>
-        <span class="chip green">✅ % Recentes <small style="margin-left:4px;opacity:.7;">proporção de clientes ativos</small></span>
-      </div>
-    </div>
-    <div class="glass-card">
-      <div class="card-title" style="margin-bottom:12px;">Por que no nível bairro?</div>
-      <div class="card-body" style="margin-bottom:14px;">"Individualmente, quase todo cliente está 'antigo' — o produto foi descontinuado. Mas alguns bairros se mantiveram mais ativos que outros. Marketing toma decisões geográficas, não pessoa por pessoa."</div>
-      <div class="callout blue" style="margin-top:0;font-style:normal;font-size:12px;">Nível de análise: <strong style="color:var(--accent-blue)">bairro</strong> (não pessoa), com métricas agregadas por bairro como features para o modelo.</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 15: K-MEANS COTOVELO ========== -->
-<div class="slide" data-slide="15" data-steps="1" data-chapter="05 — Os Modelos" data-step-types="chart">
-  <div class="slide-title">O Método do Cotovelo</div>
-  <div class="context-text">"Testamos K de 2 a 10. Plotamos a inertia — quanto menor, mais compactos os grupos. O 'cotovelo' da curva indica onde adicionar mais grupos para de melhorar: K = 4."</div>
-  <div class="chart-scroll" style="flex:1;">
-    <div class="step step-1">
-      <img class="chart-img full" src="data:image/png;base64,{b64['cotovelo']}" alt="Método do cotovelo K-Means">
-      <div class="callout" style="margin-top:12px;">"K = 4 é o ponto onde a curva 'vira'. Além disso, 4 grupos é um número prático para o marketing acionar — não é pouco, não é demais."</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 16: K-MEANS 4 TIERS ========== -->
-<div class="slide" data-slide="16" data-steps="2" data-chapter="05 — Os Modelos" data-step-types="chart,chart">
-  <div class="slide-title">Quatro Perfis de Bairro</div>
-  <table class="data-table" style="margin-bottom:14px;">
-    <thead><tr><th>Cluster</th><th>Nome</th><th>Bairros</th><th>Volume médio</th><th>% Recentes</th></tr></thead>
-    <tbody>
-      <tr class="row-amber"><td><strong>3</strong></td><td>🏆 Núcleo Estratégico</td><td>6</td><td>1.641</td><td>26,1%</td></tr>
-      <tr class="row-green"><td><strong>2</strong></td><td>💚 Engajado</td><td>69</td><td>98</td><td>29,4%</td></tr>
-      <tr class="row-blue"><td><strong>0</strong></td><td>📊 Massa Padrão</td><td>162</td><td>181</td><td>25,8%</td></tr>
-      <tr class="row-red"><td><strong>1</strong></td><td>📉 Em Declínio</td><td>86</td><td>102</td><td>19,6%</td></tr>
-    </tbody>
-  </table>
-  <div class="chart-scroll" style="flex:1;">
-    <div class="grid-2">
-      <div class="step step-1">
-        <img class="chart-img" src="data:image/png;base64,{b64['scatter1']}" alt="Volume × % Recentes">
-      </div>
-      <div class="step step-2">
-        <img class="chart-img" src="data:image/png;base64,{b64['scatter2']}" alt="Recência × % Recentes">
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 17: ÁRVORE A PERGUNTA ========== -->
-<div class="slide" data-slide="17" data-steps="0" data-chapter="05 — Os Modelos">
-  <div class="slide-title">Modelo 2: Árvore de Decisão</div>
-  <div class="slide-subtitle purple">"O que a localização revela sobre o comportamento de compra?"</div>
-  <div class="col-2" style="flex:1;align-items:start;margin-top:10px;">
-    <div class="glass-card">
-      <div class="card-title" style="margin-bottom:12px;">O Algoritmo</div>
-      <div class="card-body" style="margin-bottom:14px;">"A árvore de decisão é supervisionada — aprende com exemplos rotulados (RECENTE ou ANTIGO) e descobre as regras que melhor separam as duas classes, usando apenas variáveis geográficas."</div>
-      <div class="section-head">Features utilizadas</div>
-      <div class="dim-chips">
-        <span class="chip muted">🏘️ Bairro</span>
-        <span class="chip muted">🏙️ Cidade</span>
-        <span class="chip muted">📮 CEP-3</span>
-      </div>
-      <div class="section-head" style="margin-top:14px;">Target</div>
-      <span class="chip purple">🎯 RECENTE ou ANTIGO</span>
-    </div>
-    <div>
-      <div class="decision-card amber">
-        <div class="dc-title">class_weight='balanced'</div>
-        <div class="dc-body">"Base: 75% ANTIGO / 25% RECENTE. Sem ajuste, a árvore aprenderia a sempre prever ANTIGO e ficaria 'certa' 75% do tempo — mas inútil. O balanceamento força o modelo a aprender a distinguir de verdade."</div>
-      </div>
-      <div class="decision-card blue">
-        <div class="dc-title">max_depth=5</div>
-        <div class="dc-body">"Uma árvore sem limite decora os dados (overfitting). Com profundidade 5, ela generaliza — e ainda é possível visualizar e explicar ao marketing."</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 18: ÁRVORE VISUALIZAÇÃO ========== -->
-<div class="slide" data-slide="18" data-steps="1" data-chapter="05 — Os Modelos" data-step-types="chart">
-  <div class="slide-title">A Estrutura da Árvore</div>
-  <div class="context-text">"Cada nó é uma pergunta. Cada folha é uma conclusão: RECENTE ou ANTIGO. O algoritmo escolheu essas perguntas automaticamente — as que melhor separam as classes."</div>
-  <div class="chart-scroll" style="flex:1;">
-    <div class="step step-1">
-      <img class="chart-img tall" src="data:image/png;base64,{b64['arvore']}" alt="Árvore de Decisão" style="max-height:58vh;">
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 19: ÁRVORE O ACHADO ========== -->
-<div class="slide" data-slide="19" data-steps="1" data-chapter="05 — Os Modelos" data-step-types="chart">
-  <div class="slide-title">O Bairro é o Que Mais Importa</div>
-  <div class="context-text">"A árvore calcula automaticamente quanto cada variável contribuiu para as separações. O resultado confirma a intuição do projeto: bairro contém mais informação preditiva do que cidade ou CEP."</div>
-  <div class="chart-scroll" style="flex:1;">
-    <div class="step step-1">
-      <img class="chart-img" src="data:image/png;base64,{b64['importancia']}" alt="Importância das variáveis">
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center;">
-        <span class="chip amber" style="font-size:13px;padding:7px 16px;">Bairro → variável mais preditiva</span>
-        <span class="chip muted">CEP-3 → segundo lugar</span>
-        <span class="chip muted">Cidade → menor contribuição</span>
-      </div>
-      <div class="callout blue" style="margin-top:14px;">"Conclusão de negócio: campanhas devem ser segmentadas no nível bairro — nem cidade (genérico demais), nem rua (específico demais)."</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 20: AS TRÊS LISTAS ========== -->
-<div class="slide" data-slide="20" data-steps="0" data-chapter="06 — As Recomendações">
-  <div class="slide-title">Bairros Priorizados</div>
-  <div class="slide-subtitle">Três perfis, três estratégias</div>
-  <div class="grid-3" style="flex:1;align-items:start;overflow-y:auto;">
-    <div class="rec-card">
-      <div class="rec-card-header green">⭐ Estrela — Manter</div>
-      <div class="rec-card-body">
-        <div class="rec-badge green">2.808 clientes ativos</div>
-        <div class="rec-desc">Alto volume + alto % recentes</div>
-        <ul class="rec-list">
-          <li><span class="name">Campo Grande</span><span class="stats">2.274 part. / 26,1% rec.</span></li>
-          <li><span class="name">Santa Cruz</span><span class="stats">1.785 / 26,9%</span></li>
-          <li><span class="name">Bangu</span><span class="stats">1.584 / 26,8%</span></li>
-          <li><span class="name">Realengo</span><span class="stats">1.171 / 27,7%</span></li>
-          <li><span class="name">Paciência</span><span class="stats">796 / 29,4%</span></li>
-        </ul>
-      </div>
-      <div class="rec-card-footer"><span class="chip green" style="font-size:11px;">Google Ads + Instagram</span></div>
-    </div>
-    <div class="rec-card">
-      <div class="rec-card-header red">🔴 Em Risco — Reativar</div>
-      <div class="rec-card-body">
-        <div class="rec-badge red">5.435 dormentes</div>
-        <div class="rec-desc">Alto volume + baixo % recentes</div>
-        <ul class="rec-list">
-          <li><span class="name">Centro</span><span class="stats">2.009 part. / 24,9% rec.</span></li>
-          <li><span class="name">Guaratiba</span><span class="stats">1.028 / 23,9%</span></li>
-          <li><span class="name">Taquara</span><span class="stats">712 / 23,0%</span></li>
-          <li><span class="name">Inhoaíba</span><span class="stats">621 / 24,0%</span></li>
-          <li><span class="name">Ramos</span><span class="stats">619 / 24,7%</span></li>
-        </ul>
-      </div>
-      <div class="rec-card-footer"><span class="chip red" style="font-size:11px;">Meta Ads geo + WhatsApp</span></div>
-    </div>
-    <div class="rec-card">
-      <div class="rec-card-header blue">🚀 Emergente — Expandir</div>
-      <div class="rec-card-body">
-        <div class="rec-badge blue">682 participantes</div>
-        <div class="rec-desc">Baixo volume + alto % recentes</div>
-        <ul class="rec-list">
-          <li><span class="name">Encantado</span><span class="stats">62 part. / 40,3% rec.</span></li>
-          <li><span class="name">Jd. José Bonifácio</span><span class="stats">64 / 39,1%</span></li>
-          <li><span class="name">Quitandinha</span><span class="stats">50 / 38,0%</span></li>
-          <li><span class="name">Aracatiba</span><span class="stats">86 / 37,2%</span></li>
-          <li><span class="name">Vila Itamarati</span><span class="stats">82 / 36,6%</span></li>
-        </ul>
-      </div>
-      <div class="rec-card-footer"><span class="chip blue" style="font-size:11px;">Meta Ads teste A/B</span></div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== SLIDE 21: PLANO DE AÇÃO ========== -->
-<div class="slide" data-slide="21" data-steps="0" data-chapter="06 — As Recomendações">
-  <div class="slide-title">Plano de Ação</div>
-  <div class="slide-subtitle">Executável na segunda-feira de manhã</div>
-  <div class="budget-bar-wrap">
-    <div class="budget-segment amber">50% Reativação</div>
-    <div class="budget-segment green">35% Manutenção</div>
-    <div class="budget-segment blue">15% Expansão</div>
-  </div>
-  <div class="action-header">
-    <div>#</div><div>Bairro</div><div>Categoria</div><div>Potencial</div><div>Ação</div><div>Canal</div>
-  </div>
-  <div class="action-row">
-    <div class="priority-badge">1</div>
-    <div class="bairro-name">CENTRO</div>
-    <div><span class="cat-tag reativacao">REATIVAÇÃO</span></div>
-    <div class="potencial">1.509 clientes</div>
-    <div class="acao">Oferta especial</div>
-    <div class="canal">Meta Ads geo + WhatsApp</div>
-  </div>
-  <div class="action-row">
-    <div class="priority-badge">2</div>
-    <div class="bairro-name">GUARATIBA</div>
-    <div><span class="cat-tag reativacao">REATIVAÇÃO</span></div>
-    <div class="potencial">782 clientes</div>
-    <div class="acao">Oferta especial</div>
-    <div class="canal">Meta Ads geo + WhatsApp</div>
-  </div>
-  <div class="action-row">
-    <div class="priority-badge">3</div>
-    <div class="bairro-name">CAMPO GRANDE</div>
-    <div><span class="cat-tag manutencao">MANUTENÇÃO</span></div>
-    <div class="potencial">594 clientes</div>
-    <div class="acao">Novos sorteios</div>
-    <div class="canal">Google Ads + Instagram</div>
-  </div>
-  <div class="action-row">
-    <div class="priority-badge">4</div>
-    <div class="bairro-name">TAQUARA</div>
-    <div><span class="cat-tag reativacao">REATIVAÇÃO</span></div>
-    <div class="potencial">548 clientes</div>
-    <div class="acao">Oferta especial</div>
-    <div class="canal">Meta Ads geo + WhatsApp</div>
-  </div>
-  <div class="action-row">
-    <div class="priority-badge">5</div>
-    <div class="bairro-name">SANTA CRUZ</div>
-    <div><span class="cat-tag manutencao">MANUTENÇÃO</span></div>
-    <div class="potencial">480 clientes</div>
-    <div class="acao">Novos sorteios</div>
-    <div class="canal">Google Ads + Instagram</div>
-  </div>
-  <div class="callout" style="margin-top:14px;font-size:12px;">"KPI principal: 5% de taxa de reativação em 90 dias = ~272 clientes recuperados nos 10 bairros em risco"</div>
-</div>
-
-<!-- ========== SLIDE 22: ENCERRAMENTO ========== -->
-<div class="slide slide-closing" data-slide="22" data-steps="0" data-chapter="">
-  <div class="closing-title">Não entregamos uma análise.</div>
-  <div class="closing-subtitle">Entregamos uma ferramenta.</div>
-  <div class="feature-cards">
-    <div class="feature-card">
-      <div class="icon">🔄</div>
-      <div class="title">Reutilizável</div>
-      <div class="desc">Troque o CSV. Ajuste o Bloco 0. Rode. Em 5 minutos, novas listas priorizadas para qualquer produto futuro.</div>
-    </div>
-    <div class="feature-card">
-      <div class="icon">📁</div>
-      <div class="title">5 arquivos CSV</div>
-      <div class="desc">tiers_por_bairro.csv · bairros_estrela.csv · bairros_risco.csv · bairros_emergentes.csv · plano_de_acao.csv</div>
-    </div>
-    <div class="feature-card">
-      <div class="icon">🎯</div>
-      <div class="title">Zero fricção</div>
-      <div class="desc">O time de marketing usa o plano_de_acao.csv sem abrir o Python. Decisão baseada em dados, sem precisar de analista.</div>
-    </div>
-  </div>
-  <div class="group-info">
-    <div>Grupo 5 — Gabriel Maino · Gabriela Cohen · Hyan Lucas · Isabelle Cavalcante · João Bittencourt · Malena Catallini</div>
-    <div class="course">Projeto Aplicado — IBM3297 — IBMEC RJ — 2026.1</div>
-  </div>
-</div>
-
-</div><!-- /presentation -->
 
 <script>
-(function() {{
-  'use strict';
-
-  const TOTAL_SLIDES = 22;
-  let currentSlide = 1;
-  let currentStep = 0;
-  let isAnimating = false;
-
-  // Step type → loader status message
-  const STATUS_MESSAGES = {{
-    'code':   'Executando célula Python...',
-    'output': 'Processando output...',
-    'chart':  'Renderizando visualização...',
-  }};
-
-  function getSlideEl(n) {{
-    return document.querySelector(`.slide[data-slide="${{n}}"]`);
-  }}
-
-  function getMaxSteps(n) {{
-    const el = getSlideEl(n);
-    return el ? parseInt(el.dataset.steps || '0') : 0;
-  }}
-
-  function getStepType(slideN, stepN) {{
-    const el = getSlideEl(slideN);
-    if (!el) return 'output';
-    const types = (el.dataset.stepTypes || '').split(',');
-    return types[stepN - 1] || 'output';
-  }}
-
-  function updateUI() {{
-    // Progress bar
-    const pct = (currentSlide / TOTAL_SLIDES) * 100;
-    document.getElementById('top-progress-fill').style.width = pct + '%';
-
-    // Slide counter
-    const sc = document.getElementById('slide-counter');
-    const pad = n => String(n).padStart(2, '0');
-    sc.textContent = pad(currentSlide) + ' / ' + pad(TOTAL_SLIDES);
-
-    // Chapter
-    const el = getSlideEl(currentSlide);
-    const chap = el ? (el.dataset.chapter || '') : '';
-    const ct = document.getElementById('chapter-text');
-    const ci = document.getElementById('chapter-indicator');
-    if (chap) {{
-      ct.textContent = chap;
-      ci.style.opacity = '1';
-    }} else {{
-      ci.style.opacity = '0';
-    }}
-  }}
-
-  function revealStep(stepN) {{
-    const el = getSlideEl(currentSlide);
-    if (!el) return;
-    const stepEl = el.querySelector(`.step-${{stepN}}`);
-    if (stepEl) {{
-      stepEl.classList.add('revealed');
-    }}
-  }}
-
-  function showLoader(stepType, callback) {{
-    const loader = document.getElementById('exec-loader');
-    const statusEl = document.getElementById('loader-status');
-    const progressEl = document.getElementById('loader-progress');
-
-    statusEl.textContent = STATUS_MESSAGES[stepType] || STATUS_MESSAGES['output'];
-    progressEl.style.transition = 'none';
-    progressEl.style.width = '0%';
-
-    loader.classList.add('visible');
-
-    // Trigger reflow then animate
-    requestAnimationFrame(() => {{
-      requestAnimationFrame(() => {{
-        progressEl.classList.add('animating');
-        progressEl.style.width = '100%';
-      }});
-    }});
-
-    setTimeout(() => {{
-      loader.classList.remove('visible');
-      progressEl.classList.remove('animating');
-      progressEl.style.transition = 'none';
-      progressEl.style.width = '0%';
-      callback();
-    }}, 1400);
-  }}
-
-  function goToSlide(n) {{
-    if (n < 1 || n > TOTAL_SLIDES || isAnimating) return;
-    isAnimating = true;
-
-    const fromEl = getSlideEl(currentSlide);
-    const toEl = getSlideEl(n);
-    if (!toEl) {{ isAnimating = false; return; }}
-
-    const direction = n > currentSlide ? 1 : -1;
-
-    // Set initial position for incoming slide
-    toEl.style.transition = 'none';
-    toEl.style.transform = direction > 0 ? 'translateX(100%)' : 'translateX(-100%)';
-    toEl.style.opacity = '0';
-    toEl.style.pointerEvents = 'none';
-
-    // Make incoming slide visible but positioned off-screen
-    requestAnimationFrame(() => {{
-      requestAnimationFrame(() => {{
-        if (fromEl) {{
-          fromEl.style.transition = 'transform 0.5s cubic-bezier(.4,0,.2,1), opacity 0.5s ease';
-          fromEl.style.transform = direction > 0 ? 'translateX(-100%)' : 'translateX(100%)';
-          fromEl.style.opacity = '0';
-          fromEl.classList.remove('active');
-        }}
-
-        toEl.style.transition = 'transform 0.5s cubic-bezier(.4,0,.2,1), opacity 0.5s ease';
-        toEl.style.transform = 'translateX(0)';
-        toEl.style.opacity = '1';
-        toEl.style.pointerEvents = 'all';
-        toEl.classList.add('active');
-
-        setTimeout(() => {{
-          if (fromEl) {{
-            fromEl.style.transition = '';
-            fromEl.style.transform = '';
-            fromEl.style.opacity = '';
-            fromEl.style.pointerEvents = '';
-          }}
-          currentSlide = n;
-          currentStep = 0;
-          isAnimating = false;
-          updateUI();
-        }}, 520);
-      }});
-    }});
-  }}
-
-  function advance() {{
-    if (isAnimating) return;
-    const maxSteps = getMaxSteps(currentSlide);
-
-    if (currentStep < maxSteps) {{
-      const nextStep = currentStep + 1;
-      const stepType = getStepType(currentSlide, nextStep);
-      isAnimating = true;
-      showLoader(stepType, () => {{
-        currentStep = nextStep;
-        revealStep(currentStep);
-        isAnimating = false;
-      }});
-    }} else {{
-      if (currentSlide < TOTAL_SLIDES) {{
-        goToSlide(currentSlide + 1);
-      }}
-    }}
-  }}
-
-  function retreat() {{
-    if (isAnimating) return;
-    if (currentSlide > 1) {{
-      goToSlide(currentSlide - 1);
-    }}
-  }}
-
-  // Keyboard
-  document.addEventListener('keydown', (e) => {{
-    if (e.key === 'ArrowRight' || e.key === ' ') {{
-      e.preventDefault();
-      advance();
-    }} else if (e.key === 'ArrowLeft') {{
-      e.preventDefault();
-      retreat();
-    }}
-  }});
-
-  // Expose to onclick handlers
-  window.advance = advance;
-  window.retreat = retreat;
-
-  // Init
-  updateUI();
-
-  // Syntax highlighting
-  document.addEventListener('DOMContentLoaded', () => {{
-    if (window.hljs) hljs.highlightAll();
-  }});
-  if (document.readyState !== 'loading') {{
-    if (window.hljs) hljs.highlightAll();
-  }}
-}})();
+{JS}
 </script>
 </body>
 </html>"""
 
 out_path = '/home/user/PAD/apresentacao.html'
 with open(out_path, 'w', encoding='utf-8') as f:
-    f.write(html)
+    f.write(html_output)
 
-size_kb = os.path.getsize(out_path) // 1024
-print(f"Done. File: {out_path}")
-print(f"Size: {size_kb} KB ({size_kb/1024:.1f} MB)")
+size_kb = os.path.getsize(out_path) / 1024
+print(f"Generated: {out_path}")
+print(f"Size: {size_kb:.1f} KB")
+print(f"Slides: {TOTAL}")
